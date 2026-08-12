@@ -1,0 +1,24 @@
+{
+	# Die Admin-Schnittstelle wird von switch-slot.sh für den Neuladevorgang
+	# genutzt. Sie ist nur im internen Netz erreichbar, niemals öffentlich.
+	admin 0.0.0.0:2019
+	auto_https off
+}
+
+:80 {
+	log {
+		output stdout
+		format console
+	}
+
+	# Metriken der Anwendung nicht nach aussen geben. Prometheus greift die
+	# Slots direkt im internen Netz ab.
+	handle /metrics* {
+		respond "nicht verfügbar" 404
+	}
+
+	# Der aktive Slot steht in einer eigenen Datei, die switch-slot.sh
+	# austauscht. Danach genügt ein Neuladen der Konfiguration -- Caddy
+	# übernimmt sie ohne Verbindungsabbruch (Story R-02).
+	import /etc/caddy/active-slot.conf
+}

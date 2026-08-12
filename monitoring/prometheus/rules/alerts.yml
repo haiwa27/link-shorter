@@ -1,0 +1,24 @@
+groups:
+  - name: healthgate
+    rules:
+      # Der gleiche Ausdruck, den observe.sh verwendet -- hier als Alarm für
+      # den Daürbetrieb (Story O-06).
+      - alert: HoheFehlerrate
+        expr: |
+          sum by (slot) (rate(healthgate_http_requests_total{status=~"5.."}[2m]))
+            / clamp_min(sum by (slot) (rate(healthgate_http_requests_total[2m])), 0.001)
+            > 0.05
+        for: 2m
+        labels:
+          schwere: kritisch
+        annotations:
+          zusammenfassung: "Fehlerrate ueber 5 Prozent in Slot {{ $labels.slot }}"
+          beschreibung: "Seit mindestens 2 Minuten antwortet mehr als jede zwanzigste Anfrage mit 5xx."
+
+      - alert: InstanzNichtErreichbar
+        expr: up{job="healthgate-prod"} == 0
+        for: 1m
+        labels:
+          schwere: kritisch
+        annotations:
+          zusammenfassung: "Instanz {{ $labels.instance }} antwortet nicht"

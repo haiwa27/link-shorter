@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Läuft vor jedem Commit. Zweck: Fehler abfangen, die sonst erst die Pipeline
+# rot machen -- und verhindern, dass Vertrauliches ins Repository gelangt.
+set -euo pipefail
+
+gestaged() { git diff --cached --name-only --diff-filter=ACM; }
+fehler=0
+
+# --- 1. Nichts Vertrauliches ------------------------------------------------
+if gestaged | grep -qE '(^|/)\.env$|(^|/)\.env\.[^e]'; then
+	echo "ABBRUCH: eine .env-Datei ist gestaged. Diese gehört nie ins Repository." >&2
+	fehler=1
+fi
+
+# Verbotene Muster (echte Domains, Namen, Rufnummern) stehen in einer lokalen,
+# nicht versionierten Datei. Eine Zeile je erweiterter regulärer Ausdruck.
+MUSTER=".git-verbotene-muster"
+if [ -f "$MUSTER" ]; then
+	while IFS= read -r ausdruck; do
+		[ -z "$ausdruck" ] && continue
+		case "$ausdruck" in \#*) continue ;; esac
+		if treffer="$(git diff --cached -U0 | grep -nE "^\+.*$ausdruck" || true)"; then
+			if [ -n "$treffer" ]; then
+				echo "ABBRUCH: verbotenes Muster '$ausdruck' gefunden:" >&2
+				echo "$treffer" | head -5 >&2
+				fehler=1
+			fi
+		fi
+	done < "$MUSTER"
+fi
+
+# --- 2. Go: Formatierung und statische Analyse ------------------------------
+if gestaged | grep -q '\.go$' && command -v go >/dev/null 2>&1; then
+	unformatiert="$(cd app && gofmt -l . || true)"
+	if [ -n "$unformatiert" ]; then
+		echo "ABBRUCH: nicht formatiert (gofmt):" >&2
+		echo "$unformatiert" >&2
+		echo "  beheben mit: cd app && gofmt -w ." >&2
+		fehler=1
+	fi
+	if ! (cd app && go vet ./... 2>&1); then
+		echo "ABBRUCH: go vet meldet Probleme." >&2
+		fehler=1
+	fi
+fi
+
+# --- 3. Keine Debug-Reste ---------------------------------------------------
+if reste="$(git diff --cached -U0 -- '*.go' '*.ts' '*.tsx' | grep -nE '^\+.*(fmt\.Print|console\.log|TODO: ENTFERNEN)' || true)"; then
+	if [ -n "$reste" ]; then
+		echo "WARNUNG: mögliche Debug-Ausgaben im Commit:" >&2
+		echo "$reste" | head -5 >&2
+		echo "  (nur ein Hinweis, der Commit läuft durch)" >&2
+	fi
+fi
+
+exit "$fehler"
