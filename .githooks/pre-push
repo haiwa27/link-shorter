@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# Zwei Aufgaben: kein direkter Push auf main, und keine roten Tests im Remote.
+# Greift auch dann, wenn serverseitiger Branch-Schutz nicht verfügbar ist.
+set -euo pipefail
+
+main_betroffen=0
+tests_noetig=0
+
+# Git übergibt je Ref eine Zeile: <lokaler-ref> <lokaler-sha> <remote-ref> <remote-sha>
+while read -r _ lokale_sha ferner_ref _; do
+	[ -z "${ferner_ref:-}" ] && continue
+	case "$ferner_ref" in
+		refs/heads/main) main_betroffen=1 ;;
+		refs/heads/*)    tests_noetig=1 ;;
+		refs/tags/*)     : ;;
+	esac
+	# Löschung eines Refs braucht keine Tests.
+	case "$lokale_sha" in 0000000*) tests_noetig=0 ;; esac
+done
+
+if [ "$main_betroffen" -eq 1 ]; then
+	echo "ABBRUCH: kein direkter Push auf main." >&2
+	echo "  Änderungen laufen über einen Branch und einen Pull Request." >&2
+	echo "  Branch anlegen: tools/story-start.sh <Story-ID> \"<Titel>\"" >&2
+	echo "  Erstmaliger Push oder begründete Ausnahme: git push --no-verify" >&2
+	exit 1
+fi
+
+if [ "$tests_noetig" -eq 1 ] && command -v go >/dev/null 2>&1 && [ -d app ]; then
+	echo "==> Unit-Tests vor dem Push"
+	if ! (cd app && go test ./... >/dev/null); then
+		echo "ABBRUCH: Tests sind rot. Ausgabe mit: cd app && go test ./..." >&2
+		exit 1
+	fi
+	echo "    grün"
+fi
+
+exit 0

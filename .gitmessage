@@ -1,0 +1,13 @@
+
+# Form: typ(bereich): Betreff        (höchstens 72 Zeichen, kein Punkt am Ende)
+#
+# Typen: feat fix docs refactor test ci build perf chore revert
+# Bereiche: shortener pipeline deploy monitoring rollback web docs
+#
+# Beispiel: feat(rollback): Beobachtungsfenster nach dem Umschalten ergänzen
+#
+# Leerzeile, dann Text:
+# - Warum wurde geändert (das Was steht im Diff)
+# - Story-ID nennen, z. B. "Umsetzt R-04"
+#
+# Umlaute als ä, ö, ü und ß schreiben, nicht als ae, oe, ue, ss.

@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Prüft die Form der Commit-Nachricht (Conventional Commits).
+#
+# Form: typ(bereich): Betreff
+# Beispiel: feat(pipeline): Beobachtungsfenster für den Health Gate ergänzen
+#
+# Der Grund ist nicht Formalismus: tools/release.sh erzeugt aus diesen Typen
+# automatisch das Changelog. Ohne einheitliche Form gibt es kein Changelog.
+set -euo pipefail
+
+DATEI="$1"
+BETREFF="$(head -1 "$DATEI")"
+
+case "$BETREFF" in
+	"#"*|"Merge "*|"Revert "*|"fixup!"*|"squash!"*) exit 0 ;;
+esac
+
+TYPEN='feat|fix|docs|refactor|test|ci|build|perf|chore|revert'
+
+if ! printf '%s' "$BETREFF" | grep -qE "^($TYPEN)(\([a-z0-9-]+\))?!?: .{5,}"; then
+	echo "ABBRUCH: Betreff folgt nicht der Form 'typ(bereich): Beschreibung'." >&2
+	echo "" >&2
+	echo "  Erlaubte Typen: feat fix docs refactor test ci build perf chore revert" >&2
+	echo "" >&2
+	echo "  Beispiele:" >&2
+	echo "    feat(shortener): Wunsch-Slug beim Anlegen erlauben" >&2
+	echo "    fix(pipeline): Rollback nur nach erfolgtem Umschalten auslösen" >&2
+	echo "    docs(architektur): Begründung für Blue/Green ergänzen" >&2
+	echo "" >&2
+	echo "  Erhalten: $BETREFF" >&2
+	exit 1
+fi
+
+if [ ${#BETREFF} -gt 72 ]; then
+	echo "ABBRUCH: Betreff ist ${#BETREFF} Zeichen lang, erlaubt sind 72." >&2
+	exit 1
+fi
+
+case "$BETREFF" in
+	*.) echo "ABBRUCH: Betreff endet mit einem Punkt." >&2; exit 1 ;;
+esac
+
+ZWEITE="$(sed -n '2p' "$DATEI")"
+if [ -n "$ZWEITE" ]; then
+	echo "ABBRUCH: zweite Zeile muss leer sein (Betreff, Leerzeile, Text)." >&2
+	exit 1
+fi
+
+# Hinweis, keine Blockade: Umlaute als ä, ö, ü und ß schreiben. Eine harte
+# Prüfung ist nicht möglich, weil viele Wörter diese Buchstabenfolgen
+# legitim enthalten.
+if printf '%s' "$BETREFF" | grep -qE '\b(fuer|ueber|koennen|muessen|aendern|loeschen|groesse|pruefen|zurueck|ergaenzen)\b'; then
+	echo "HINWEIS: Umlaute bitte als ä, ö, ü schreiben statt ae, oe, ue." >&2
+fi
+
+exit 0

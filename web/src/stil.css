@@ -1,0 +1,112 @@
+:root {
+  --hintergrund: #14213d;
+  --flaeche: #1c2b4a;
+  --text: #f4f5f7;
+  --gedaempft: #9aa6bf;
+  --akzent: #4c8dff;
+  --fehler: #ff6b6b;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  background: var(--hintergrund);
+  color: var(--text);
+}
+
+main {
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem;
+}
+
+h1 {
+  letter-spacing: -0.02em;
+}
+
+.hinweis {
+  color: var(--gedaempft);
+}
+
+.karte {
+  display: grid;
+  gap: 0.5rem;
+  background: var(--flaeche);
+  padding: 1.25rem;
+  border-radius: 0.5rem;
+  margin-bottom: 2rem;
+}
+
+label {
+  font-size: 0.85rem;
+  color: var(--gedaempft);
+}
+
+input {
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #2f4166;
+  border-radius: 0.35rem;
+  background: #101a30;
+  color: var(--text);
+}
+
+button {
+  justify-self: start;
+  margin-top: 0.5rem;
+  padding: 0.6rem 1.1rem;
+  border: 0;
+  border-radius: 0.35rem;
+  background: var(--akzent);
+  color: #04122c;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.fehler {
+  color: var(--fehler);
+  margin: 0.25rem 0 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.55rem 0.5rem;
+  border-bottom: 1px solid #2a3a5c;
+  font-size: 0.9rem;
+}
+
+th {
+  color: var(--gedaempft);
+  font-weight: 500;
+}
+
+td.ziel {
+  color: var(--gedaempft);
+  max-width: 24rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+a {
+  color: var(--akzent);
+}
+
+td button {
+  margin: 0;
+  padding: 0.3rem 0.6rem;
+  background: transparent;
+  color: var(--gedaempft);
+  border: 1px solid #2f4166;
+  font-weight: 400;
+}

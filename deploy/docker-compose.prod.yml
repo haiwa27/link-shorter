@@ -1,0 +1,69 @@
+name: healthgate-prod
+
+# Beide Slots laufen gleichzeitig (Story R-01). Nur einer bekommt Verkehr --
+# welcher, entscheidet die Datei caddy/active-slot.conf.
+
+x-app: &app
+  build:
+    context: ..
+    dockerfile: app/Dockerfile
+  environment: &app-env
+    HEALTHGATE_UMGEBUNG: prod
+    HEALTHGATE_DB_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
+  depends_on:
+    db:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  app-blue:
+    <<: *app
+    environment:
+      <<: *app-env
+      HEALTHGATE_SLOT: blue
+      HEALTHGATE_VERSION: ${VERSION_BLUE:-dev}
+      HEALTHGATE_CHAOS_RATE: ${CHAOS_BLUE:-0.0}
+
+  app-green:
+    <<: *app
+    environment:
+      <<: *app-env
+      HEALTHGATE_SLOT: green
+      HEALTHGATE_VERSION: ${VERSION_GREEN:-dev}
+      HEALTHGATE_CHAOS_RATE: ${CHAOS_GREEN:-0.0}
+
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "2019:2019"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/active-slot.conf:/etc/caddy/active-slot.conf:ro
+    depends_on:
+      - app-blue
+      - app-green
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - db-prod:/var/lib/postgresql/data
+      - ../app/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  db-prod:
+
+networks:
+  default:
+    name: healthgate

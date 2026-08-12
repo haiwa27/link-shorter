@@ -1,0 +1,28 @@
+# Umgebung und Zugangsdaten -- gehört niemals ins Repository
+.env
+.env.*
+!.env.example
+
+# Go
+/app/bin/
+coverage.out
+coverage.html
+
+# Node
+node_modules/
+/web/dist/
+/tests/e2e/node_modules/
+/tests/e2e/test-results/
+/tests/e2e/playwright-report/
+
+# Laufzeitzustand der Deployments
+/deploy/state/*
+!/deploy/state/.gitkeep
+
+# Editor
+.idea/
+.vscode/
+*.swp
+
+# Lokale Sperrliste des pre-commit-Hooks
+.git-verbotene-muster
