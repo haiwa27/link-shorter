@@ -84,7 +84,7 @@ pipeline {
 			}
 		}
 
-		stage('Image veroeffentlichen') {
+		stage('Image veröffentlichen') {
 			steps {
 				// TODO(C-08): Zugangsdaten über withCredentials einbinden.
 				// Niemals Token im Jenkinsfile oder im Log.
@@ -118,7 +118,7 @@ pipeline {
 			}
 		}
 
-		stage('Freigabe fuer Produktion') {
+		stage('Freigabe für Produktion') {
 			when { branch 'main' }
 			steps {
 				// Story C-07: bewusste menschliche Entscheidung vor Produktion.
@@ -148,7 +148,7 @@ pipeline {
 			}
 		}
 
-		stage('Pruefung vor dem Umschalten') {
+		stage('Prüfung vor dem Umschalten') {
 			when { branch 'main' }
 			steps {
 				// Story R-03: der neue Slot muss sich mehrfach gesund melden,
