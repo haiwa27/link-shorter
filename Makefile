@@ -33,7 +33,7 @@ staging-down:
 	$(COMPOSE) -f deploy/docker-compose.staging.yml down
 
 prod-up: ## Produktion mit beiden Slots starten
-	$(COMPOSE) -f deploy/docker-compose.prod.yml --env-file .env up -d --build
+	VERSION_BLUE=$(SHA) VERSION_GREEN=$(SHA) $(COMPOSE) -f deploy/docker-compose.prod.yml --env-file .env up -d --build
 
 prod-down:
 	$(COMPOSE) -f deploy/docker-compose.prod.yml down
