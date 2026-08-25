@@ -14,19 +14,32 @@ type Zustand = {
   grund?: string;
 };
 
-const ZUSTAND_INTERVALL = 5000;
+const TAKT = 5000;
+const PROBEN_MAX = 28;
+
+function dauerText(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = String(s % 60).padStart(2, "0");
+  const mm = String(m).padStart(2, "0");
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
 
 export function App() {
   const [links, setLinks] = useState<Link[]>([]);
   const [zustand, setZustand] = useState<Zustand | null>(null);
+  const [proben, setProben] = useState<number[]>([]);
   const [umgeschaltet, setUmgeschaltet] = useState(false);
+  const [seitWechsel, setSeitWechsel] = useState<number>(() => Date.now());
+  const [jetzt, setJetzt] = useState<number>(() => Date.now());
   const [ziel, setZiel] = useState("");
   const [wunschSlug, setWunschSlug] = useState("");
   const [fehler, setFehler] = useState<string | null>(null);
   const [laeuft, setLaeuft] = useState(false);
   const [geladen, setGeladen] = useState(false);
-  const [zuletztAngelegt, setZuletztAngelegt] = useState<Link | null>(null);
-  const [kopiert, setKopiert] = useState(false);
+  const [neuerSlug, setNeuerSlug] = useState<string | null>(null);
+  const [kopiertSlug, setKopiertSlug] = useState<string | null>(null);
 
   const vorigerSlot = useRef<string | null>(null);
 
@@ -43,36 +56,54 @@ export function App() {
     }
   }, []);
 
-  // Zustandsschild: fragt denselben Endpunkt ab, den auch das Health-Gate der
-  // Pipeline auswertet. Wechselt der Slot, wird das hier sichtbar -- genau das
-  // passiert beim Umschalten und beim Rollback.
+  // Fragt denselben Endpunkt ab, den auch das Health-Gate der Pipeline
+  // auswertet. Die Antwortzeit jeder Probe wird gemessen und unten als
+  // Verlauf gezeichnet — echte Messwerte, keine Dekoration.
   const ladeZustand = useCallback(async () => {
+    const beginn = performance.now();
     try {
       const antwort = await fetch("/healthz");
+      const dauer = performance.now() - beginn;
       const daten: Zustand = await antwort.json();
       setZustand(daten);
+      setProben((alt) => [...alt.slice(-(PROBEN_MAX - 1)), dauer]);
       if (vorigerSlot.current && daten.slot && daten.slot !== vorigerSlot.current) {
         setUmgeschaltet(true);
-        window.setTimeout(() => setUmgeschaltet(false), 6000);
+        setSeitWechsel(Date.now());
+        window.setTimeout(() => setUmgeschaltet(false), 7000);
         void ladeListe();
       }
       if (daten.slot) vorigerSlot.current = daten.slot;
     } catch {
       setZustand({ status: "nicht erreichbar" });
+      setProben((alt) => [...alt.slice(-(PROBEN_MAX - 1)), 0]);
     }
   }, [ladeListe]);
 
   useEffect(() => {
     void ladeListe();
     void ladeZustand();
-    const takt = window.setInterval(ladeZustand, ZUSTAND_INTERVALL);
-    return () => window.clearInterval(takt);
+    const abfrage = window.setInterval(ladeZustand, TAKT);
+    const uhr = window.setInterval(() => setJetzt(Date.now()), 1000);
+    return () => {
+      window.clearInterval(abfrage);
+      window.clearInterval(uhr);
+    };
   }, [ladeListe, ladeZustand]);
+
+  const slot = zustand?.slot ?? "";
+  const slotName = slot === "blue" ? "blau" : slot === "green" ? "grün" : "—";
+  const bereit = zustand?.status === "bereit";
+
+  // Die ganze Seite trägt die Farbe des bedienenden Slots. Beim Umschalten
+  // und beim Rollback kippt dadurch die Atmosphäre — sichtbar, ohne Neuladen.
+  useEffect(() => {
+    document.documentElement.dataset.slot = slot || "unbekannt";
+  }, [slot]);
 
   async function anlegen() {
     setLaeuft(true);
     setFehler(null);
-    setKopiert(false);
     try {
       const antwort = await fetch("/api/links", {
         method: "POST",
@@ -83,7 +114,8 @@ export function App() {
       if (!antwort.ok) {
         throw new Error(daten?.fehler ?? `Der Kurzlink konnte nicht angelegt werden (${antwort.status}).`);
       }
-      setZuletztAngelegt(daten as Link);
+      setNeuerSlug((daten as Link).slug);
+      window.setTimeout(() => setNeuerSlug(null), 2500);
       setZiel("");
       setWunschSlug("");
       await ladeListe();
@@ -94,171 +126,189 @@ export function App() {
     }
   }
 
-  async function loeschen(slug: string) {
+  async function loeschen(slug_: string) {
     setFehler(null);
     try {
-      const antwort = await fetch(`/api/links/${slug}`, { method: "DELETE" });
+      const antwort = await fetch(`/api/links/${slug_}`, { method: "DELETE" });
       if (!antwort.ok && antwort.status !== 204) {
         throw new Error(`Der Kurzlink konnte nicht gelöscht werden (${antwort.status}).`);
       }
-      if (zuletztAngelegt?.slug === slug) setZuletztAngelegt(null);
       await ladeListe();
     } catch (err) {
       setFehler(err instanceof Error ? err.message : "Der Kurzlink konnte nicht gelöscht werden.");
     }
   }
 
-  async function kopieren(slug: string) {
+  async function kopieren(slug_: string) {
     try {
-      await navigator.clipboard.writeText(`${window.location.origin}/${slug}`);
-      setKopiert(true);
-      window.setTimeout(() => setKopiert(false), 2000);
+      await navigator.clipboard.writeText(`${window.location.origin}/${slug_}`);
+      setKopiertSlug(slug_);
+      window.setTimeout(() => setKopiertSlug(null), 1800);
     } catch {
-      setFehler("Kopieren ist in diesem Browser nicht möglich. Die Adresse steht in der Liste.");
+      setFehler("Kopieren geht nur über HTTPS oder localhost. Die Adresse steht im Link.");
     }
   }
 
-  const slot = zustand?.slot ?? "unbekannt";
-  const bereit = zustand?.status === "bereit";
-  const slotKlasse = slot === "blue" ? "ist-blau" : slot === "green" ? "ist-gruen" : "ist-unklar";
+  function beiEnter(e: React.KeyboardEvent) {
+    if (e.key === "Enter" && ziel && !laeuft) void anlegen();
+  }
+
+  const letzteProbe = proben.length > 0 ? proben[proben.length - 1] : 0;
+  const probenMax = Math.max(60, ...proben);
 
   return (
     <div className="rahmen">
-      {/* Signatur der Oberflaeche: welcher Slot bedient dich gerade. */}
-      <div
-        className={`schild ${slotKlasse} ${umgeschaltet ? "wechselt" : ""}`}
-        role="status"
-        aria-live="polite"
-      >
-        <div className="schild-feld">
-          <span className="schild-marke">Slot</span>
-          <span className="schild-wert tabular">{slot}</span>
-        </div>
-        <div className="schild-feld">
-          <span className="schild-marke">Version</span>
-          <span className="schild-wert tabular">{zustand?.version ?? "—"}</span>
-        </div>
-        <div className="schild-feld">
-          <span className="schild-marke">Zustand</span>
-          <span className="schild-wert">
-            <i className={`punkt ${bereit ? "punkt-gut" : "punkt-schlecht"}`} aria-hidden="true" />
-            {zustand?.status ?? "wird geprüft"}
-          </span>
-        </div>
-        {umgeschaltet && <span className="schild-hinweis">umgeschaltet</span>}
-      </div>
-
-      <header className="kopf">
-        <h1>healthgate</h1>
-        <p>
-          Kurzlinks anlegen und verwalten. Das Schild oben zeigt, welcher Slot die Anfrage gerade
-          beantwortet — beim Umschalten und beim Rollback wechselt er hier sichtbar.
-        </p>
+      <header className="kopfzeile">
+        <span className="wortmarke">healthgate</span>
+        <span className="untertitel tabular">blue/green · beobachtet · rollback-fähig</span>
       </header>
 
-      <main className="spalten">
-        {/* Kein form-Element: bewusst ueber Klick-Handler, damit kein
-            Seiten-Neuladen die E2E-Tests stoert. */}
-        <section className="werkbank" aria-labelledby="werkbank-titel">
-          <h2 id="werkbank-titel">Neuer Kurzlink</h2>
+      {/* Die Bühne: welcher Slot bedient dich gerade. */}
+      <section className={`buehne ${umgeschaltet ? "wechselt" : ""}`} aria-live="polite">
+        <div className="buehne-links">
+          <span className="marke">Bedienender Slot</span>
+          <span className="slotwort">{slotName}</span>
+          <span className="buehne-fuss tabular">
+            {umgeschaltet ? "umgeschaltet — der Verkehr läuft jetzt hier" : "antwortet auf alle Anfragen dieser Seite"}
+          </span>
+        </div>
+        <div className="buehne-rechts">
+          <div className="fakt">
+            <span className="marke">Version</span>
+            <span className="fakt-wert tabular">{zustand?.version ?? "—"}</span>
+          </div>
+          <div className="fakt">
+            <span className="marke">Zustand</span>
+            <span className="fakt-wert">
+              <i className={`punkt ${bereit ? "gut" : "schlecht"}`} aria-hidden="true" />
+              {zustand?.status ?? "wird geprüft"}
+            </span>
+          </div>
+          <div className="fakt">
+            <span className="marke">Beobachtet seit</span>
+            <span className="fakt-wert tabular">{dauerText(jetzt - seitWechsel)}</span>
+          </div>
+          <div className="fakt">
+            <span className="marke">Antwortzeit · {Math.round(letzteProbe)} ms</span>
+            <svg className="funken" viewBox={`0 0 ${PROBEN_MAX * 5} 26`} preserveAspectRatio="none" aria-hidden="true">
+              {proben.map((p, i) => {
+                const hoehe = Math.max(2, (p / probenMax) * 24);
+                return (
+                  <rect
+                    key={i}
+                    x={i * 5}
+                    y={26 - hoehe}
+                    width={3.4}
+                    height={hoehe}
+                    className={i === proben.length - 1 ? "funke aktuell" : "funke"}
+                  />
+                );
+              })}
+            </svg>
+          </div>
+        </div>
+      </section>
 
+      {/* Kein form-Element: bewusst über Klick-Handler, damit kein
+          Seiten-Neuladen die E2E-Tests stört. */}
+      <section className="leiste" aria-label="Kurzlink anlegen">
+        <div className="feld waechst">
           <label htmlFor="ziel">Ziel-URL</label>
           <input
             id="ziel"
             data-testid="eingabe-ziel"
             value={ziel}
             onChange={(e) => setZiel(e.target.value)}
+            onKeyDown={beiEnter}
             placeholder="https://www.beispiel.de/eine/lange/adresse"
             autoComplete="off"
             spellCheck={false}
           />
-
-          <label htmlFor="slug">
-            Wunsch-Slug <span className="beiwerk">optional</span>
-          </label>
+        </div>
+        <div className="feld schmal">
+          <label htmlFor="slug">Wunsch-Slug</label>
           <input
             id="slug"
             className="tabular"
             data-testid="eingabe-slug"
             value={wunschSlug}
             onChange={(e) => setWunschSlug(e.target.value)}
-            placeholder="mein-link"
+            onKeyDown={beiEnter}
+            placeholder="optional"
             autoComplete="off"
             spellCheck={false}
           />
-          <p className="beiwerk">3 bis 32 Zeichen: Buchstaben, Ziffern, Bindestrich, Unterstrich.</p>
+        </div>
+        <button data-testid="knopf-anlegen" onClick={anlegen} disabled={laeuft || !ziel}>
+          {laeuft ? "Wird angelegt …" : "Kurzlink anlegen"}
+        </button>
+      </section>
 
-          <button data-testid="knopf-anlegen" onClick={anlegen} disabled={laeuft || !ziel}>
-            {laeuft ? "Wird angelegt …" : "Kurzlink anlegen"}
-          </button>
+      {fehler && (
+        <p className="fehler" data-testid="fehlermeldung" role="alert">
+          {fehler}
+        </p>
+      )}
 
-          {fehler && (
-            <p className="fehler" data-testid="fehlermeldung" role="alert">
-              {fehler}
-            </p>
-          )}
+      <section className="bestand" aria-labelledby="bestand-titel">
+        <div className="bestand-kopf">
+          <h2 id="bestand-titel">Kurzlinks</h2>
+          <span className="anzahl tabular">{links.length}</span>
+        </div>
 
-          {zuletztAngelegt && !fehler && (
-            <div className="quittung">
-              <span className="beiwerk">Angelegt</span>
-              <code className="tabular">/{zuletztAngelegt.slug}</code>
-              <button className="still" onClick={() => kopieren(zuletztAngelegt.slug)}>
-                {kopiert ? "Kopiert" : "Kopieren"}
-              </button>
-            </div>
-          )}
-        </section>
-
-        <section className="liste" aria-labelledby="liste-titel">
-          <div className="liste-kopf">
-            <h2 id="liste-titel">Kurzlinks</h2>
-            <span className="zahl tabular">{links.length}</span>
+        {geladen && links.length === 0 ? (
+          <div className="leer">
+            <p>Noch keine Kurzlinks.</p>
+            <p className="leer-hinweis">Ziel-URL oben eintragen und anlegen — der Rest passiert hier.</p>
           </div>
-
-          {geladen && links.length === 0 ? (
-            <p className="leer">Noch keine Kurzlinks. Leg links den ersten an.</p>
-          ) : (
-            <table data-testid="tabelle-links">
-              <thead>
-                <tr>
-                  <th scope="col">Slug</th>
-                  <th scope="col">Ziel</th>
-                  <th scope="col" className="rechts">Aufrufe</th>
-                  <th scope="col"><span className="versteckt">Aktion</span></th>
+        ) : (
+          <table data-testid="tabelle-links">
+            <thead>
+              <tr>
+                <th scope="col">Slug</th>
+                <th scope="col">Ziel</th>
+                <th scope="col" className="rechts">Aufrufe</th>
+                <th scope="col"><span className="versteckt">Aktionen</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {links.map((link) => (
+                <tr
+                  key={link.slug}
+                  data-testid={`zeile-${link.slug}`}
+                  className={link.slug === neuerSlug ? "frisch" : ""}
+                >
+                  <td>
+                    <a
+                      className="chip tabular"
+                      href={`/${link.slug}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      data-testid={`link-${link.slug}`}
+                    >
+                      /{link.slug}
+                    </a>
+                  </td>
+                  <td className="ziel" title={link.ziel}>{link.ziel}</td>
+                  <td className="rechts tabular aufrufe">{link.aufrufe}</td>
+                  <td className="rechts aktionen">
+                    <button className="still" onClick={() => kopieren(link.slug)}>
+                      {kopiertSlug === link.slug ? "Kopiert" : "Kopieren"}
+                    </button>
+                    <button
+                      className="still"
+                      data-testid={`knopf-loeschen-${link.slug}`}
+                      onClick={() => loeschen(link.slug)}
+                    >
+                      Löschen
+                    </button>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {links.map((link) => (
-                  <tr key={link.slug} data-testid={`zeile-${link.slug}`}>
-                    <td>
-                      <a
-                        className="marke tabular"
-                        href={`/${link.slug}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        data-testid={`link-${link.slug}`}
-                      >
-                        /{link.slug}
-                      </a>
-                    </td>
-                    <td className="ziel" title={link.ziel}>{link.ziel}</td>
-                    <td className="rechts tabular">{link.aufrufe}</td>
-                    <td className="rechts">
-                      <button
-                        className="still"
-                        data-testid={`knopf-loeschen-${link.slug}`}
-                        onClick={() => loeschen(link.slug)}
-                      >
-                        Löschen
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
-      </main>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
     </div>
   );
 }
