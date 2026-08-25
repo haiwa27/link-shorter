@@ -1,69 +1,46 @@
-/* healthgate — Oberfläche v3
+/* healthgate, Oberfläche v5
  *
- * Haltung: die Seite ist das Instrument. Die Farbe des Raums IST der Slot,
- * der gerade bedient — kippt der Verkehr auf den anderen Slot, kippt die
- * ganze Atmosphäre mit. Bricolage Grotesque trägt die Stimme, IBM Plex Mono
- * alles Maschinelle. Ein einziger lauter Moment (das Slotwort), alles andere
- * diszipliniert.
+ * Philosophie: Swiss / International Typographic. Papier, Tinte, ein
+ * Farbblock. Der Farbblock ist der bedienende Slot: eine satte Fläche, die
+ * blau oder grün ist und beim Umschalten hart die Farbe wechselt. Harte
+ * Linien tragen die Struktur, kein Schatten, kein Verlauf, keine Karte.
+ * Archivo (breit, schwer) für das Plakatwort, IBM Plex Mono für Daten.
  */
 
 :root {
-  --text: #edf2f7;
-  --leise: #91a3b4;
-  --stumm: #5f7183;
-  --flaeche: rgba(255, 255, 255, 0.04);
-  --flaeche-fest: #131c26;
-  --linie: rgba(255, 255, 255, 0.09);
-  --linie-stark: rgba(255, 255, 255, 0.18);
-  --warnung: #ff8b6e;
-  --warnung-grund: rgba(226, 92, 61, 0.14);
+  --papier: #fafaf6;
+  --tinte: #111110;
+  --grau: #6d6d66;
+  --hauch: #e4e3da;
+  --warnung: #c2361b;
 
-  --schrift: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --schrift: "Archivo Variable", "Archivo", "Segoe UI", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", monospace;
-  --radius: 10px;
-  --takt: 220ms;
 
-  /* Vorgabe, solange der Slot unbekannt ist. */
-  --grund: #10151c;
-  --akzent: #8a9aab;
-  --akzent-tinte: #0c1117;
-  --feld: rgba(138, 154, 171, 0.09);
+  --slot: #55554e;
+  --auf-slot: #fafaf6;
+  --auf-slot-leise: rgba(250, 250, 246, 0.68);
 }
 
 :root[data-slot="blue"] {
-  --grund: #0b1524;
-  --akzent: #6fb1ff;
-  --akzent-tinte: #051221;
-  --feld: rgba(89, 152, 231, 0.1);
+  --slot: #1a3fc4;
 }
 
 :root[data-slot="green"] {
-  --grund: #0a1a13;
-  --akzent: #4ed39a;
-  --akzent-tinte: #04160e;
-  --feld: rgba(62, 186, 133, 0.1);
+  --slot: #0a6b46;
 }
 
 * {
   box-sizing: border-box;
 }
 
-html {
-  background: var(--grund);
-  transition: background 900ms ease;
-}
-
 body {
   margin: 0;
-  min-height: 100vh;
-  background:
-    radial-gradient(90rem 40rem at 50% -18rem, var(--feld), transparent 70%),
-    var(--grund);
-  color: var(--text);
+  background: var(--papier);
+  color: var(--tinte);
   font-family: var(--schrift);
-  font-size: 15.5px;
-  line-height: 1.55;
-  transition: background 900ms ease;
+  font-size: 16px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -80,149 +57,176 @@ body {
   clip-path: inset(50%);
 }
 
-.rahmen {
-  max-width: 66rem;
+.blatt {
+  max-width: 72rem;
   margin: 0 auto;
-  padding: 1.75rem 1.5rem 6rem;
+  padding: 0 1.25rem 6rem;
 }
 
-/* ---------- Kopfzeile --------------------------------------------------- */
+/* ---------- Kopf --------------------------------------------------------- */
 
-.kopfzeile {
+.kopf {
   display: flex;
-  align-items: baseline;
   justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  align-items: baseline;
+  padding: 1.1rem 0 0.9rem;
 }
 
 .wortmarke {
-  font-size: 1.15rem;
-  font-weight: 800;
-  letter-spacing: -0.02em;
+  font-weight: 700;
+  font-stretch: 115%;
+  font-size: 1rem;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
 }
 
-.untertitel {
-  font-size: 0.72rem;
-  color: var(--stumm);
-  letter-spacing: 0.02em;
+.kopf-fakt {
+  font-size: 0.78rem;
+  color: var(--grau);
 }
 
-/* ---------- Bühne: der bedienende Slot ---------------------------------- */
+/* ---------- Farbblock: der bedienende Slot ------------------------------- */
 
-.buehne {
+.band {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 2rem;
-  align-items: end;
-  padding: 2rem 2.25rem 1.75rem;
-  border: 1px solid var(--linie);
-  border-radius: var(--radius);
-  background: linear-gradient(140deg, var(--akzent-tinte) 0%, var(--flaeche-fest) 78%);
-  overflow: hidden;
-  transition: background var(--takt) ease;
+  grid-template-areas:
+    "wort fakten"
+    "wort status";
+  gap: 0 3rem;
+  padding: 2.2rem 2.4rem 2rem;
+  background: var(--slot);
+  color: var(--auf-slot);
+  transition: background 350ms ease;
 }
 
-.buehne.wechselt {
-  animation: aufblitzen 1100ms ease-out;
-}
-
-@keyframes aufblitzen {
-  0% {
-    box-shadow: inset 0 0 0 2px var(--akzent);
-  }
-  100% {
-    box-shadow: inset 0 0 0 2px transparent;
-  }
-}
-
-.buehne-links {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
+.band-wort {
+  grid-area: wort;
   min-width: 0;
+  align-self: end;
 }
 
-.marke {
+.band-marke {
+  display: block;
   font-size: 0.68rem;
   font-weight: 600;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
-  color: var(--stumm);
+  color: var(--auf-slot-leise);
 }
 
 .slotwort {
-  font-size: clamp(3.2rem, 8vw, 5.5rem);
-  font-weight: 800;
-  line-height: 0.95;
-  letter-spacing: -0.035em;
-  color: var(--akzent);
-  transition: color var(--takt) ease;
+  margin: 0.2rem 0 0;
+  font-size: clamp(4rem, 11vw, 8.5rem);
+  font-weight: 900;
+  font-stretch: 125%;
+  line-height: 0.86;
+  letter-spacing: -0.015em;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
 }
 
-.buehne-fuss {
-  font-size: 0.74rem;
-  color: var(--leise);
-}
-
-.buehne-rechts {
+.band-fakten {
+  grid-area: fakten;
   display: grid;
-  grid-template-columns: repeat(2, minmax(9rem, auto));
-  gap: 1.1rem 2rem;
+  grid-template-columns: repeat(2, minmax(7.5rem, auto));
+  gap: 1.3rem 2.4rem;
+  align-content: start;
+  padding-top: 0.2rem;
 }
 
 .fakt {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.3rem;
 }
 
 .fakt-wert {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  font-size: 1.05rem;
+  font-size: 1rem;
   font-weight: 500;
 }
 
-.punkt {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.punkt.gut {
-  background: var(--akzent);
-  box-shadow: 0 0 0 3px var(--feld);
-}
-
-.punkt.schlecht {
-  background: var(--warnung);
+.funken-fakt {
+  justify-content: end;
 }
 
 .funken {
-  width: 8.75rem;
-  height: 26px;
+  width: 100%;
+  min-width: 8rem;
+  height: 30px;
   display: block;
 }
 
 .funke {
-  fill: var(--stumm);
-  opacity: 0.55;
+  fill: var(--auf-slot);
+  opacity: 0.38;
 }
 
 .funke.aktuell {
-  fill: var(--akzent);
   opacity: 1;
 }
 
-/* ---------- Leiste: Kurzlink anlegen ------------------------------------ */
+.band-status {
+  grid-area: status;
+  display: flex;
+  justify-content: flex-end;
+  align-items: end;
+  gap: 1rem;
+  min-height: 1.6rem;
+  padding-top: 0.8rem;
+}
 
-.leiste {
+.band-wechsel,
+.band-warnhinweis {
+  padding: 0.2rem 0.7rem;
+  border: 1.5px solid var(--auf-slot);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.band-warnhinweis {
+  background: var(--auf-slot);
+  color: var(--warnung);
+}
+
+/* ---------- Abschnitte mit harter Linie ---------------------------------- */
+
+.abschnitt {
+  margin-top: 3rem;
+  border-top: 3px solid var(--tinte);
+  padding-top: 0.7rem;
+}
+
+.abschnitt-kopf {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  margin-bottom: 1.1rem;
+}
+
+.abschnitt-kopf h2 {
+  margin: 0;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.anzahl {
+  font-size: 0.74rem;
+  color: var(--slot);
+  font-weight: 500;
+  transition: color 350ms ease;
+}
+
+/* ---------- Anlegen ------------------------------------------------------ */
+
+.zeile-anlegen {
   display: flex;
   align-items: end;
-  gap: 0.75rem;
-  margin-top: 1.25rem;
+  gap: 1rem;
 }
 
 .feld {
@@ -237,132 +241,91 @@ body {
 }
 
 .feld.schmal {
-  width: 11rem;
+  width: 12rem;
 }
 
 .feld label {
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--stumm);
+  color: var(--grau);
 }
 
 .feld input {
-  height: 3rem;
+  height: 3.1rem;
   padding: 0 0.9rem;
-  border: 1px solid var(--linie);
-  border-radius: var(--radius);
-  background: var(--flaeche);
-  color: var(--text);
+  border: 1.5px solid var(--tinte);
+  border-radius: 0;
+  background: #fff;
+  color: var(--tinte);
   font-family: inherit;
-  font-size: 0.95rem;
-  transition: border-color var(--takt) ease, background var(--takt) ease;
+  font-size: 1rem;
 }
 
 .feld input.tabular {
-  font-size: 0.88rem;
-}
-
-.feld input:hover {
-  border-color: var(--linie-stark);
+  font-size: 0.9rem;
 }
 
 .feld input:focus {
-  outline: none;
-  border-color: var(--akzent);
-  background: rgba(255, 255, 255, 0.06);
-  box-shadow: 0 0 0 3px var(--feld);
+  outline: 2.5px solid var(--slot);
+  outline-offset: -1.5px;
+  border-color: var(--slot);
 }
 
 .feld input::placeholder {
-  color: var(--stumm);
+  color: #b3b2a9;
 }
 
-.leiste button {
-  height: 3rem;
-  padding: 0 1.4rem;
-  border: 0;
-  border-radius: var(--radius);
-  background: var(--akzent);
-  color: var(--akzent-tinte);
+.zeile-anlegen button {
+  height: 3.1rem;
+  padding: 0 2.2rem;
+  border: 1.5px solid var(--slot);
+  border-radius: 0;
+  background: var(--slot);
+  color: var(--auf-slot);
   font-family: inherit;
   font-size: 0.95rem;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   cursor: pointer;
   white-space: nowrap;
-  transition: filter var(--takt) ease, background var(--takt) ease, color var(--takt) ease;
+  transition: background 350ms ease, border-color 350ms ease;
 }
 
-.leiste button:hover:not(:disabled) {
-  filter: brightness(1.12);
+.zeile-anlegen button:hover:not(:disabled) {
+  background: var(--tinte);
+  border-color: var(--tinte);
 }
 
-.leiste button:focus-visible {
-  outline: 2px solid var(--text);
+.zeile-anlegen button:focus-visible {
+  outline: 2.5px solid var(--tinte);
   outline-offset: 2px;
 }
 
-.leiste button:disabled {
-  background: var(--flaeche);
-  color: var(--stumm);
+.zeile-anlegen button:disabled {
+  background: var(--hauch);
+  border-color: var(--hauch);
+  color: var(--grau);
   cursor: not-allowed;
 }
 
 .fehler {
-  margin: 0.9rem 0 0;
-  padding: 0.7rem 0.95rem;
-  border: 1px solid rgba(226, 92, 61, 0.4);
-  border-radius: var(--radius);
-  background: var(--warnung-grund);
+  margin: 1rem 0 0;
+  padding: 0.6rem 0.9rem;
+  border-left: 4px solid var(--warnung);
   color: var(--warnung);
-  font-size: 0.88rem;
+  font-weight: 500;
+  font-size: 0.92rem;
 }
 
 /* ---------- Bestand ------------------------------------------------------ */
 
-.bestand {
-  margin-top: 2.75rem;
-}
-
-.bestand-kopf {
-  display: flex;
-  align-items: baseline;
-  gap: 0.6rem;
-  margin-bottom: 0.4rem;
-}
-
-.bestand-kopf h2 {
-  margin: 0;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--stumm);
-}
-
-.anzahl {
-  font-size: 0.72rem;
-  color: var(--akzent);
-}
-
 .leer {
-  padding: 3rem 1rem;
-  border: 1px dashed var(--linie-stark);
-  border-radius: var(--radius);
-  text-align: center;
-}
-
-.leer p {
   margin: 0;
-  font-weight: 600;
-}
-
-.leer .leer-hinweis {
-  margin-top: 0.3rem;
-  font-weight: 400;
-  font-size: 0.85rem;
-  color: var(--leise);
+  padding: 1.4rem 0 0.4rem;
+  color: var(--grau);
 }
 
 table {
@@ -372,29 +335,20 @@ table {
 }
 
 th {
-  padding: 0.65rem 0.6rem;
-  border-bottom: 1px solid var(--linie-stark);
+  padding: 0 0.75rem 0.55rem;
+  border-bottom: 1.5px solid var(--tinte);
   font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
+  font-weight: 700;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--stumm);
   text-align: left;
 }
 
 td {
-  padding: 0.8rem 0.6rem;
-  border-bottom: 1px solid var(--linie);
-  font-size: 0.9rem;
-  vertical-align: middle;
-}
-
-tbody tr {
-  transition: background var(--takt) ease;
-}
-
-tbody tr:hover {
-  background: var(--flaeche);
+  padding: 0.85rem 0.75rem;
+  border-bottom: 1px solid var(--hauch);
+  font-size: 0.95rem;
+  vertical-align: baseline;
 }
 
 tbody tr.frisch {
@@ -403,7 +357,7 @@ tbody tr.frisch {
 
 @keyframes einblenden {
   0% {
-    background: var(--feld);
+    background: var(--hauch);
   }
   100% {
     background: transparent;
@@ -412,13 +366,13 @@ tbody tr.frisch {
 
 th:first-child,
 td:first-child {
-  width: 10rem;
+  width: 11rem;
   padding-left: 0;
 }
 
 th:nth-child(3),
 td:nth-child(3) {
-  width: 5.5rem;
+  width: 6rem;
 }
 
 th:last-child,
@@ -432,44 +386,41 @@ td.rechts {
   text-align: right;
 }
 
-.chip {
+.slug {
   display: inline-block;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding: 0.22rem 0.55rem;
-  border: 1px solid var(--linie-stark);
-  border-radius: 7px;
-  background: var(--flaeche);
-  color: var(--akzent);
-  font-size: 0.82rem;
+  white-space: nowrap;
+  color: var(--slot);
+  font-size: 0.88rem;
   font-weight: 500;
   text-decoration: none;
-  white-space: nowrap;
-  transition: border-color var(--takt) ease, color var(--takt) ease;
+  border-bottom: 1.5px solid var(--slot);
+  transition: color 350ms ease, border-color 350ms ease;
 }
 
-.chip:hover {
-  border-color: var(--akzent);
+.slug:hover {
+  color: var(--tinte);
+  border-color: var(--tinte);
 }
 
-.chip:focus-visible {
-  outline: 2px solid var(--akzent);
+.slug:focus-visible {
+  outline: 2px solid var(--slot);
   outline-offset: 2px;
 }
 
 /* Kürzung ausschließlich per CSS: der Textinhalt bleibt vollständig, weil
  * die E2E-Tests die ganze Ziel-URL in der Zeile erwarten. */
 td.ziel {
-  color: var(--leise);
+  color: var(--grau);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 td.aufrufe {
-  color: var(--leise);
-  font-size: 0.85rem;
+  font-size: 0.88rem;
 }
 
 .aktionen {
@@ -477,59 +428,65 @@ td.aufrufe {
 }
 
 button.still {
-  margin-left: 0.4rem;
-  padding: 0.32rem 0.65rem;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--stumm);
+  margin-left: 1.1rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--grau);
   font-family: inherit;
-  font-size: 0.8rem;
+  font-size: 0.84rem;
+  font-weight: 500;
   cursor: pointer;
-  transition: color var(--takt) ease, border-color var(--takt) ease;
-}
-
-tbody tr:hover button.still {
-  color: var(--leise);
-  border-color: var(--linie);
+  border-bottom: 1.5px solid transparent;
 }
 
 button.still:hover {
-  color: var(--text) !important;
-  border-color: var(--linie-stark) !important;
+  color: var(--tinte);
+  border-bottom-color: var(--tinte);
 }
 
 button.still:focus-visible {
-  outline: 2px solid var(--akzent);
-  outline-offset: 1px;
-  color: var(--leise);
+  outline: 2px solid var(--slot);
+  outline-offset: 2px;
 }
 
-/* ---------- Kleine Schirme ---------------------------------------------- */
+/* ---------- Kleine Schirme ----------------------------------------------- */
 
 @media (max-width: 760px) {
-  .rahmen {
-    padding: 1.25rem 1rem 4rem;
+  .blatt {
+    padding: 0 1rem 4rem;
   }
 
-  .buehne {
+  .band {
     grid-template-columns: 1fr;
-    gap: 1.5rem;
-    padding: 1.5rem 1.25rem;
+    grid-template-areas:
+      "wort"
+      "fakten"
+      "status";
+    gap: 1.6rem;
+    padding: 1.6rem 1.4rem 1.4rem;
   }
 
-  .buehne-rechts {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1rem;
+  .slotwort {
+    font-size: clamp(3.4rem, 19vw, 5.5rem);
   }
 
-  .leiste {
+  .band-status {
+    justify-content: flex-start;
+    padding-top: 0;
+  }
+
+  .zeile-anlegen {
     flex-direction: column;
     align-items: stretch;
   }
 
   .feld.schmal {
     width: 100%;
+  }
+
+  .zeile-anlegen button {
+    height: 3.2rem;
   }
 
   th:nth-child(2),
@@ -544,7 +501,7 @@ button.still:focus-visible {
 
   th:last-child,
   td:last-child {
-    width: 9.5rem;
+    width: 10.5rem;
   }
 }
 
