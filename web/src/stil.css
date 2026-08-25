@@ -1,46 +1,75 @@
-/* healthgate -- Oberflaeche
+/* healthgate — Oberfläche v3
  *
- * Haltung: hell und flach, tiefe Tinte statt Schwarz, IBM Plex Mono fuer alles
- * Maschinelle (Slug, Version, Zaehler) und Hanken Grotesk fuer Fliesstext.
- * Die Slot-Farben sind nicht dekorativ: blau ist blau, gruen ist gruen, weil
- * genau das die Bezeichnung des bedienenden Slots ist.
+ * Haltung: die Seite ist das Instrument. Die Farbe des Raums IST der Slot,
+ * der gerade bedient — kippt der Verkehr auf den anderen Slot, kippt die
+ * ganze Atmosphäre mit. Bricolage Grotesque trägt die Stimme, IBM Plex Mono
+ * alles Maschinelle. Ein einziger lauter Moment (das Slotwort), alles andere
+ * diszipliniert.
  */
 
 :root {
-  --tinte: #16202e;
-  --tinte-leise: #5c6a7d;
-  --papier: #f5f6f4;
-  --karte: #ffffff;
-  --linie: #dfe1dc;
-  --slot-blau: #2563a8;
-  --slot-gruen: #1c7a58;
-  --warnung: #a8321e;
+  --text: #edf2f7;
+  --leise: #91a3b4;
+  --stumm: #5f7183;
+  --flaeche: rgba(255, 255, 255, 0.04);
+  --flaeche-fest: #131c26;
+  --linie: rgba(255, 255, 255, 0.09);
+  --linie-stark: rgba(255, 255, 255, 0.18);
+  --warnung: #ff8b6e;
+  --warnung-grund: rgba(226, 92, 61, 0.14);
 
-  --schrift: "Hanken Grotesk", "Segoe UI", system-ui, sans-serif;
+  --schrift: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", monospace;
+  --radius: 10px;
+  --takt: 220ms;
 
-  --radius: 4px;
-  --takt: 180ms;
+  /* Vorgabe, solange der Slot unbekannt ist. */
+  --grund: #10151c;
+  --akzent: #8a9aab;
+  --akzent-tinte: #0c1117;
+  --feld: rgba(138, 154, 171, 0.09);
+}
+
+:root[data-slot="blue"] {
+  --grund: #0b1524;
+  --akzent: #6fb1ff;
+  --akzent-tinte: #051221;
+  --feld: rgba(89, 152, 231, 0.1);
+}
+
+:root[data-slot="green"] {
+  --grund: #0a1a13;
+  --akzent: #4ed39a;
+  --akzent-tinte: #04160e;
+  --feld: rgba(62, 186, 133, 0.1);
 }
 
 * {
   box-sizing: border-box;
 }
 
+html {
+  background: var(--grund);
+  transition: background 900ms ease;
+}
+
 body {
   margin: 0;
-  background: var(--papier);
-  color: var(--tinte);
+  min-height: 100vh;
+  background:
+    radial-gradient(90rem 40rem at 50% -18rem, var(--feld), transparent 70%),
+    var(--grund);
+  color: var(--text);
   font-family: var(--schrift);
-  font-size: 15px;
-  line-height: 1.5;
+  font-size: 15.5px;
+  line-height: 1.55;
+  transition: background 900ms ease;
   -webkit-font-smoothing: antialiased;
 }
 
 .tabular {
   font-family: var(--mono);
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
 }
 
 .versteckt {
@@ -52,277 +81,288 @@ body {
 }
 
 .rahmen {
-  max-width: 68rem;
+  max-width: 66rem;
   margin: 0 auto;
-  padding: 1.5rem 1.25rem 5rem;
+  padding: 1.75rem 1.5rem 6rem;
 }
 
-/* ---------- Zustandsschild: die Signatur der Oberflaeche ---------------- */
+/* ---------- Kopfzeile --------------------------------------------------- */
 
-.schild {
+.kopfzeile {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.wortmarke {
+  font-size: 1.15rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.untertitel {
+  font-size: 0.72rem;
+  color: var(--stumm);
+  letter-spacing: 0.02em;
+}
+
+/* ---------- Bühne: der bedienende Slot ---------------------------------- */
+
+.buehne {
+  display: grid;
+  grid-template-columns: 1fr auto;
   gap: 2rem;
-  padding: 0.75rem 1.25rem;
-  background: var(--karte);
+  align-items: end;
+  padding: 2rem 2.25rem 1.75rem;
   border: 1px solid var(--linie);
-  border-left: 5px solid var(--tinte-leise);
   border-radius: var(--radius);
-  transition: border-left-color var(--takt) ease, box-shadow var(--takt) ease;
+  background: linear-gradient(140deg, var(--akzent-tinte) 0%, var(--flaeche-fest) 78%);
+  overflow: hidden;
+  transition: background var(--takt) ease;
 }
 
-.schild.ist-blau {
-  border-left-color: var(--slot-blau);
+.buehne.wechselt {
+  animation: aufblitzen 1100ms ease-out;
 }
 
-.schild.ist-gruen {
-  border-left-color: var(--slot-gruen);
-}
-
-.schild.wechselt {
-  animation: aufmerken 900ms ease-out;
-}
-
-@keyframes aufmerken {
+@keyframes aufblitzen {
   0% {
-    box-shadow: 0 0 0 0 rgba(22, 32, 46, 0.18);
+    box-shadow: inset 0 0 0 2px var(--akzent);
   }
   100% {
-    box-shadow: 0 0 0 14px rgba(22, 32, 46, 0);
+    box-shadow: inset 0 0 0 2px transparent;
   }
 }
 
-.schild-feld {
+.buehne-links {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: 0.35rem;
+  min-width: 0;
 }
 
-.schild-marke {
+.marke {
   font-size: 0.68rem;
-  font-weight: 500;
-  letter-spacing: 0.09em;
+  font-weight: 600;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--tinte-leise);
+  color: var(--stumm);
 }
 
-.schild-wert {
+.slotwort {
+  font-size: clamp(3.2rem, 8vw, 5.5rem);
+  font-weight: 800;
+  line-height: 0.95;
+  letter-spacing: -0.035em;
+  color: var(--akzent);
+  transition: color var(--takt) ease;
+}
+
+.buehne-fuss {
+  font-size: 0.74rem;
+  color: var(--leise);
+}
+
+.buehne-rechts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(9rem, auto));
+  gap: 1.1rem 2rem;
+}
+
+.fakt {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.fakt-wert {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
-  font-size: 0.95rem;
+  gap: 0.45rem;
+  font-size: 1.05rem;
   font-weight: 500;
-}
-
-.schild-hinweis {
-  margin-left: auto;
-  padding: 0.15rem 0.55rem;
-  border: 1px solid var(--linie);
-  border-radius: 999px;
-  font-size: 0.72rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--tinte-leise);
 }
 
 .punkt {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: var(--tinte-leise);
 }
 
-.punkt-gut {
-  background: var(--slot-gruen);
+.punkt.gut {
+  background: var(--akzent);
+  box-shadow: 0 0 0 3px var(--feld);
 }
 
-.punkt-schlecht {
+.punkt.schlecht {
   background: var(--warnung);
 }
 
-/* ---------- Kopf ------------------------------------------------------- */
-
-.kopf {
-  margin: 2.75rem 0 1.75rem;
-  max-width: 44rem;
+.funken {
+  width: 8.75rem;
+  height: 26px;
+  display: block;
 }
 
-.kopf h1 {
-  margin: 0 0 0.35rem;
-  font-size: 2rem;
-  font-weight: 600;
-  letter-spacing: -0.025em;
+.funke {
+  fill: var(--stumm);
+  opacity: 0.55;
 }
 
-.kopf p {
-  margin: 0;
-  color: var(--tinte-leise);
+.funke.aktuell {
+  fill: var(--akzent);
+  opacity: 1;
 }
 
-/* ---------- Aufteilung ------------------------------------------------- */
+/* ---------- Leiste: Kurzlink anlegen ------------------------------------ */
 
-.spalten {
-  display: grid;
-  grid-template-columns: 20rem 1fr;
-  gap: 1.25rem;
-  align-items: start;
+.leiste {
+  display: flex;
+  align-items: end;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
 }
 
-.werkbank,
-.liste {
-  background: var(--karte);
-  border: 1px solid var(--linie);
-  border-radius: var(--radius);
-  padding: 1.25rem;
+.feld {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
-.werkbank h2,
-.liste h2 {
-  margin: 0 0 1rem;
+.feld.waechst {
+  flex: 1;
+  min-width: 0;
+}
+
+.feld.schmal {
+  width: 11rem;
+}
+
+.feld label {
   font-size: 0.72rem;
   font-weight: 600;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--tinte-leise);
+  color: var(--stumm);
 }
 
-/* ---------- Werkbank -------------------------------------------------- */
-
-.werkbank label {
-  display: block;
-  margin-bottom: 0.3rem;
-  font-size: 0.83rem;
-  font-weight: 500;
-}
-
-.werkbank input {
-  width: 100%;
-  padding: 0.5rem 0.65rem;
-  margin-bottom: 0.9rem;
+.feld input {
+  height: 3rem;
+  padding: 0 0.9rem;
   border: 1px solid var(--linie);
   border-radius: var(--radius);
-  background: var(--papier);
-  color: var(--tinte);
+  background: var(--flaeche);
+  color: var(--text);
   font-family: inherit;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   transition: border-color var(--takt) ease, background var(--takt) ease;
 }
 
-.werkbank input:focus {
-  outline: 2px solid var(--slot-blau);
-  outline-offset: 1px;
-  border-color: var(--slot-blau);
-  background: var(--karte);
-}
-
-.werkbank input::placeholder {
-  color: #a6aeb9;
-}
-
-.beiwerk {
-  font-size: 0.76rem;
-  font-weight: 400;
-  color: var(--tinte-leise);
-}
-
-.werkbank p.beiwerk {
-  margin: -0.55rem 0 1.1rem;
-}
-
-button {
-  padding: 0.5rem 0.95rem;
-  border: 1px solid var(--tinte);
-  border-radius: var(--radius);
-  background: var(--tinte);
-  color: #fff;
-  font-family: inherit;
+.feld input.tabular {
   font-size: 0.88rem;
-  font-weight: 500;
+}
+
+.feld input:hover {
+  border-color: var(--linie-stark);
+}
+
+.feld input:focus {
+  outline: none;
+  border-color: var(--akzent);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 0 0 3px var(--feld);
+}
+
+.feld input::placeholder {
+  color: var(--stumm);
+}
+
+.leiste button {
+  height: 3rem;
+  padding: 0 1.4rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--akzent);
+  color: var(--akzent-tinte);
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: background var(--takt) ease, border-color var(--takt) ease;
+  white-space: nowrap;
+  transition: filter var(--takt) ease, background var(--takt) ease, color var(--takt) ease;
 }
 
-button:hover:not(:disabled) {
-  background: #223047;
+.leiste button:hover:not(:disabled) {
+  filter: brightness(1.12);
 }
 
-button:focus-visible {
-  outline: 2px solid var(--slot-blau);
+.leiste button:focus-visible {
+  outline: 2px solid var(--text);
   outline-offset: 2px;
 }
 
-button:disabled {
-  background: #c9ced6;
-  border-color: #c9ced6;
+.leiste button:disabled {
+  background: var(--flaeche);
+  color: var(--stumm);
   cursor: not-allowed;
-}
-
-button.still {
-  padding: 0.25rem 0.55rem;
-  background: transparent;
-  border-color: var(--linie);
-  color: var(--tinte-leise);
-  font-size: 0.8rem;
-}
-
-button.still:hover:not(:disabled) {
-  background: var(--papier);
-  border-color: var(--tinte-leise);
-  color: var(--tinte);
 }
 
 .fehler {
   margin: 0.9rem 0 0;
-  padding: 0.55rem 0.7rem;
-  border-left: 3px solid var(--warnung);
-  background: #fdf3f1;
-  color: #7f2617;
-  font-size: 0.85rem;
-}
-
-.quittung {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  margin-top: 0.9rem;
-  padding: 0.55rem 0.7rem;
-  border: 1px dashed var(--linie);
+  padding: 0.7rem 0.95rem;
+  border: 1px solid rgba(226, 92, 61, 0.4);
   border-radius: var(--radius);
-}
-
-.quittung code {
+  background: var(--warnung-grund);
+  color: var(--warnung);
   font-size: 0.88rem;
-  font-weight: 500;
 }
 
-.quittung button {
-  margin-left: auto;
+/* ---------- Bestand ------------------------------------------------------ */
+
+.bestand {
+  margin-top: 2.75rem;
 }
 
-/* ---------- Liste ----------------------------------------------------- */
-
-.liste-kopf {
+.bestand-kopf {
   display: flex;
   align-items: baseline;
   gap: 0.6rem;
+  margin-bottom: 0.4rem;
 }
 
-.liste-kopf h2 {
-  margin-bottom: 1rem;
+.bestand-kopf h2 {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--stumm);
 }
 
-.zahl {
-  margin-bottom: 1rem;
-  font-size: 0.78rem;
-  color: var(--tinte-leise);
+.anzahl {
+  font-size: 0.72rem;
+  color: var(--akzent);
 }
 
 .leer {
-  margin: 0;
-  padding: 2rem 0 1.5rem;
-  color: var(--tinte-leise);
+  padding: 3rem 1rem;
+  border: 1px dashed var(--linie-stark);
+  border-radius: var(--radius);
   text-align: center;
+}
+
+.leer p {
+  margin: 0;
+  font-weight: 600;
+}
+
+.leer .leer-hinweis {
+  margin-top: 0.3rem;
+  font-weight: 400;
+  font-size: 0.85rem;
+  color: var(--leise);
 }
 
 table {
@@ -332,35 +372,59 @@ table {
 }
 
 th {
-  padding: 0 0.5rem 0.4rem;
-  border-bottom: 1px solid var(--linie);
-  font-size: 0.7rem;
-  font-weight: 500;
-  letter-spacing: 0.07em;
+  padding: 0.65rem 0.6rem;
+  border-bottom: 1px solid var(--linie-stark);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--tinte-leise);
+  color: var(--stumm);
   text-align: left;
 }
 
 td {
-  padding: 0.7rem 0.5rem;
-  border-bottom: 1px solid #eceee9;
-  font-size: 0.88rem;
+  padding: 0.8rem 0.6rem;
+  border-bottom: 1px solid var(--linie);
+  font-size: 0.9rem;
   vertical-align: middle;
 }
 
-tbody tr:last-child td {
-  border-bottom: 0;
+tbody tr {
+  transition: background var(--takt) ease;
 }
 
-tbody tr:hover td {
-  background: #fafbf9;
+tbody tr:hover {
+  background: var(--flaeche);
+}
+
+tbody tr.frisch {
+  animation: einblenden 2200ms ease-out;
+}
+
+@keyframes einblenden {
+  0% {
+    background: var(--feld);
+  }
+  100% {
+    background: transparent;
+  }
 }
 
 th:first-child,
 td:first-child {
-  width: 9.5rem;
+  width: 10rem;
   padding-left: 0;
+}
+
+th:nth-child(3),
+td:nth-child(3) {
+  width: 5.5rem;
+}
+
+th:last-child,
+td:last-child {
+  width: 11.5rem;
+  padding-right: 0;
 }
 
 th.rechts,
@@ -368,69 +432,104 @@ td.rechts {
   text-align: right;
 }
 
-td.rechts:last-child,
-th:last-child {
-  width: 5.5rem;
-  padding-right: 0;
-}
-
-th:nth-child(3),
-td:nth-child(3) {
-  width: 5rem;
-}
-
-.marke {
+.chip {
   display: inline-block;
-  padding: 0.1rem 0.4rem;
-  border: 1px solid var(--linie);
-  border-radius: var(--radius);
-  background: var(--papier);
-  color: var(--slot-blau);
-  font-size: 0.83rem;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0.22rem 0.55rem;
+  border: 1px solid var(--linie-stark);
+  border-radius: 7px;
+  background: var(--flaeche);
+  color: var(--akzent);
+  font-size: 0.82rem;
   font-weight: 500;
   text-decoration: none;
+  white-space: nowrap;
+  transition: border-color var(--takt) ease, color var(--takt) ease;
 }
 
-.marke:hover {
-  border-color: var(--slot-blau);
-  text-decoration: underline;
+.chip:hover {
+  border-color: var(--akzent);
 }
 
-.marke:focus-visible {
-  outline: 2px solid var(--slot-blau);
-  outline-offset: 1px;
+.chip:focus-visible {
+  outline: 2px solid var(--akzent);
+  outline-offset: 2px;
 }
 
-/* Kuerzung ausschliesslich per CSS: der Textinhalt bleibt vollstaendig, weil
+/* Kürzung ausschließlich per CSS: der Textinhalt bleibt vollständig, weil
  * die E2E-Tests die ganze Ziel-URL in der Zeile erwarten. */
 td.ziel {
-  color: var(--tinte-leise);
+  color: var(--leise);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-/* ---------- Kleine Schirme ------------------------------------------- */
+td.aufrufe {
+  color: var(--leise);
+  font-size: 0.85rem;
+}
+
+.aktionen {
+  white-space: nowrap;
+}
+
+button.still {
+  margin-left: 0.4rem;
+  padding: 0.32rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--stumm);
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: color var(--takt) ease, border-color var(--takt) ease;
+}
+
+tbody tr:hover button.still {
+  color: var(--leise);
+  border-color: var(--linie);
+}
+
+button.still:hover {
+  color: var(--text) !important;
+  border-color: var(--linie-stark) !important;
+}
+
+button.still:focus-visible {
+  outline: 2px solid var(--akzent);
+  outline-offset: 1px;
+  color: var(--leise);
+}
+
+/* ---------- Kleine Schirme ---------------------------------------------- */
 
 @media (max-width: 760px) {
-  .spalten {
+  .rahmen {
+    padding: 1.25rem 1rem 4rem;
+  }
+
+  .buehne {
     grid-template-columns: 1fr;
+    gap: 1.5rem;
+    padding: 1.5rem 1.25rem;
   }
 
-  .schild {
-    gap: 1.1rem;
+  .buehne-rechts {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
   }
 
-  .schild-hinweis {
-    margin-left: 0;
+  .leiste {
+    flex-direction: column;
+    align-items: stretch;
   }
 
-  .kopf {
-    margin-top: 2rem;
-  }
-
-  .kopf h1 {
-    font-size: 1.6rem;
+  .feld.schmal {
+    width: 100%;
   }
 
   th:nth-child(2),
@@ -443,8 +542,9 @@ td.ziel {
     width: auto;
   }
 
-  .leer {
-    text-align: left;
+  th:last-child,
+  td:last-child {
+    width: 9.5rem;
   }
 }
 
