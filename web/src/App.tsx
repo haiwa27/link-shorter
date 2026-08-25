@@ -15,7 +15,7 @@ type Zustand = {
 };
 
 const TAKT = 5000;
-const PROBEN_MAX = 28;
+const PROBEN_MAX = 32;
 
 function dauerText(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -57,8 +57,8 @@ export function App() {
   }, []);
 
   // Fragt denselben Endpunkt ab, den auch das Health-Gate der Pipeline
-  // auswertet. Die Antwortzeit jeder Probe wird gemessen und unten als
-  // Verlauf gezeichnet, echte Messwerte, keine Dekoration.
+  // auswertet. Die Antwortzeit jeder Probe wird gemessen und als Verlauf
+  // gezeichnet: echte Messwerte, keine Dekoration.
   const ladeZustand = useCallback(async () => {
     const beginn = performance.now();
     try {
@@ -94,8 +94,8 @@ export function App() {
   const slot = zustand?.slot ?? "";
   const bereit = zustand?.status === "bereit";
 
-  // Die ganze Seite trägt die Farbe des bedienenden Slots. Beim Umschalten
-  // und beim Rollback kippt dadurch die Atmosphäre, sichtbar, ohne Neuladen.
+  // Der Farbblock der Seite ist der bedienende Slot. Beim Umschalten und beim
+  // Rollback wechselt er sichtbar, ohne Neuladen.
   useEffect(() => {
     document.documentElement.dataset.slot = slot || "unbekannt";
   }, [slot]);
@@ -156,46 +156,40 @@ export function App() {
   const probenMax = Math.max(60, ...proben);
 
   return (
-    <div className="rahmen">
-      <header className="kopfzeile">
+    <div className="blatt">
+      <header className="kopf">
         <span className="wortmarke">healthgate</span>
+        <span className="kopf-fakt tabular">{zustand?.version ?? "?"}</span>
       </header>
 
-      {/* Die Bühne: welcher Slot bedient dich gerade. */}
-      <section className={`buehne ${umgeschaltet ? "wechselt" : ""}`} aria-live="polite">
-        <div className="buehne-links">
-          <span className="marke">Slot</span>
-          <span className="slotwort">{slot || "?"}</span>
-          {umgeschaltet && <span className="wechsel-marke">umgeschaltet</span>}
+      <section className="band" aria-live="polite">
+        <div className="band-wort">
+          <span className="band-marke">Bedienender Slot</span>
+          <h1 className="slotwort">{slot || "?"}</h1>
         </div>
-        <div className="buehne-rechts">
+        <div className="band-fakten">
           <div className="fakt">
-            <span className="marke">Version</span>
-            <span className="fakt-wert tabular">{zustand?.version ?? "?"}</span>
+            <span className="band-marke">Zustand</span>
+            <span className="fakt-wert">{zustand?.status ?? "wird geprüft"}</span>
           </div>
           <div className="fakt">
-            <span className="marke">Zustand</span>
-            <span className="fakt-wert">
-              <i className={`punkt ${bereit ? "gut" : "schlecht"}`} aria-hidden="true" />
-              {zustand?.status ?? "wird geprüft"}
-            </span>
-          </div>
-          <div className="fakt">
-            <span className="marke">Seit Wechsel</span>
+            <span className="band-marke">Seit Wechsel</span>
             <span className="fakt-wert tabular">{dauerText(jetzt - seitWechsel)}</span>
           </div>
           <div className="fakt">
-            <span className="marke">Antwortzeit</span>
-            <span className="fakt-wert tabular klein">{Math.round(letzteProbe)} ms</span>
-            <svg className="funken" viewBox={`0 0 ${PROBEN_MAX * 5} 26`} preserveAspectRatio="none" aria-hidden="true">
+            <span className="band-marke">Antwortzeit</span>
+            <span className="fakt-wert tabular">{Math.round(letzteProbe)} ms</span>
+          </div>
+          <div className="fakt funken-fakt" aria-hidden="true">
+            <svg className="funken" viewBox={`0 0 ${PROBEN_MAX * 5} 30`} preserveAspectRatio="none">
               {proben.map((p, i) => {
-                const hoehe = Math.max(2, (p / probenMax) * 24);
+                const hoehe = Math.max(2, (p / probenMax) * 28);
                 return (
                   <rect
                     key={i}
                     x={i * 5}
-                    y={26 - hoehe}
-                    width={3.4}
+                    y={30 - hoehe}
+                    width={3.2}
                     height={hoehe}
                     className={i === proben.length - 1 ? "funke aktuell" : "funke"}
                   />
@@ -204,59 +198,65 @@ export function App() {
             </svg>
           </div>
         </div>
+        <div className="band-status">
+          {!bereit && zustand && <span className="band-warnhinweis">{zustand.status}</span>}
+          {umgeschaltet && <span className="band-wechsel">Umgeschaltet</span>}
+        </div>
       </section>
 
       {/* Kein form-Element: bewusst über Klick-Handler, damit kein
           Seiten-Neuladen die E2E-Tests stört. */}
-      <section className="leiste" aria-label="Kurzlink anlegen">
-        <div className="feld waechst">
-          <label htmlFor="ziel">Ziel-URL</label>
-          <input
-            id="ziel"
-            data-testid="eingabe-ziel"
-            value={ziel}
-            onChange={(e) => setZiel(e.target.value)}
-            onKeyDown={beiEnter}
-            placeholder="https://www.beispiel.de/eine/lange/adresse"
-            autoComplete="off"
-            spellCheck={false}
-          />
+      <section className="abschnitt" aria-label="Kurzlink anlegen">
+        <div className="abschnitt-kopf">
+          <h2>Neuer Kurzlink</h2>
         </div>
-        <div className="feld schmal">
-          <label htmlFor="slug">Wunsch-Slug</label>
-          <input
-            id="slug"
-            className="tabular"
-            data-testid="eingabe-slug"
-            value={wunschSlug}
-            onChange={(e) => setWunschSlug(e.target.value)}
-            onKeyDown={beiEnter}
-            placeholder="optional"
-            autoComplete="off"
-            spellCheck={false}
-          />
+        <div className="zeile-anlegen">
+          <div className="feld waechst">
+            <label htmlFor="ziel">Ziel-URL</label>
+            <input
+              id="ziel"
+              data-testid="eingabe-ziel"
+              value={ziel}
+              onChange={(e) => setZiel(e.target.value)}
+              onKeyDown={beiEnter}
+              placeholder="https://www.beispiel.de/eine/lange/adresse"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </div>
+          <div className="feld schmal">
+            <label htmlFor="slug">Wunsch-Slug</label>
+            <input
+              id="slug"
+              className="tabular"
+              data-testid="eingabe-slug"
+              value={wunschSlug}
+              onChange={(e) => setWunschSlug(e.target.value)}
+              onKeyDown={beiEnter}
+              placeholder="optional"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </div>
+          <button data-testid="knopf-anlegen" onClick={anlegen} disabled={laeuft || !ziel}>
+            {laeuft ? "Wird angelegt" : "Anlegen"}
+          </button>
         </div>
-        <button data-testid="knopf-anlegen" onClick={anlegen} disabled={laeuft || !ziel}>
-          {laeuft ? "Wird angelegt …" : "Kurzlink anlegen"}
-        </button>
+        {fehler && (
+          <p className="fehler" data-testid="fehlermeldung" role="alert">
+            {fehler}
+          </p>
+        )}
       </section>
 
-      {fehler && (
-        <p className="fehler" data-testid="fehlermeldung" role="alert">
-          {fehler}
-        </p>
-      )}
-
-      <section className="bestand" aria-labelledby="bestand-titel">
-        <div className="bestand-kopf">
+      <section className="abschnitt" aria-labelledby="bestand-titel">
+        <div className="abschnitt-kopf">
           <h2 id="bestand-titel">Kurzlinks</h2>
           <span className="anzahl tabular">{links.length}</span>
         </div>
 
         {geladen && links.length === 0 ? (
-          <div className="leer">
-            <p>Noch keine Kurzlinks.</p>
-          </div>
+          <p className="leer">Noch keine Kurzlinks.</p>
         ) : (
           <table data-testid="tabelle-links">
             <thead>
@@ -276,7 +276,7 @@ export function App() {
                 >
                   <td>
                     <a
-                      className="chip tabular"
+                      className="slug tabular"
                       href={`/${link.slug}`}
                       target="_blank"
                       rel="noreferrer"
