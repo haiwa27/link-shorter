@@ -58,7 +58,7 @@ export function App() {
 
   // Fragt denselben Endpunkt ab, den auch das Health-Gate der Pipeline
   // auswertet. Die Antwortzeit jeder Probe wird gemessen und unten als
-  // Verlauf gezeichnet — echte Messwerte, keine Dekoration.
+  // Verlauf gezeichnet, echte Messwerte, keine Dekoration.
   const ladeZustand = useCallback(async () => {
     const beginn = performance.now();
     try {
@@ -92,11 +92,10 @@ export function App() {
   }, [ladeListe, ladeZustand]);
 
   const slot = zustand?.slot ?? "";
-  const slotName = slot === "blue" ? "blau" : slot === "green" ? "grün" : "—";
   const bereit = zustand?.status === "bereit";
 
   // Die ganze Seite trägt die Farbe des bedienenden Slots. Beim Umschalten
-  // und beim Rollback kippt dadurch die Atmosphäre — sichtbar, ohne Neuladen.
+  // und beim Rollback kippt dadurch die Atmosphäre, sichtbar, ohne Neuladen.
   useEffect(() => {
     document.documentElement.dataset.slot = slot || "unbekannt";
   }, [slot]);
@@ -145,7 +144,7 @@ export function App() {
       setKopiertSlug(slug_);
       window.setTimeout(() => setKopiertSlug(null), 1800);
     } catch {
-      setFehler("Kopieren geht nur über HTTPS oder localhost. Die Adresse steht im Link.");
+      setFehler("Kopieren geht nur über HTTPS oder localhost.");
     }
   }
 
@@ -160,22 +159,19 @@ export function App() {
     <div className="rahmen">
       <header className="kopfzeile">
         <span className="wortmarke">healthgate</span>
-        <span className="untertitel tabular">blue/green · beobachtet · rollback-fähig</span>
       </header>
 
       {/* Die Bühne: welcher Slot bedient dich gerade. */}
       <section className={`buehne ${umgeschaltet ? "wechselt" : ""}`} aria-live="polite">
         <div className="buehne-links">
-          <span className="marke">Bedienender Slot</span>
-          <span className="slotwort">{slotName}</span>
-          <span className="buehne-fuss tabular">
-            {umgeschaltet ? "umgeschaltet — der Verkehr läuft jetzt hier" : "antwortet auf alle Anfragen dieser Seite"}
-          </span>
+          <span className="marke">Slot</span>
+          <span className="slotwort">{slot || "?"}</span>
+          {umgeschaltet && <span className="wechsel-marke">umgeschaltet</span>}
         </div>
         <div className="buehne-rechts">
           <div className="fakt">
             <span className="marke">Version</span>
-            <span className="fakt-wert tabular">{zustand?.version ?? "—"}</span>
+            <span className="fakt-wert tabular">{zustand?.version ?? "?"}</span>
           </div>
           <div className="fakt">
             <span className="marke">Zustand</span>
@@ -185,11 +181,12 @@ export function App() {
             </span>
           </div>
           <div className="fakt">
-            <span className="marke">Beobachtet seit</span>
+            <span className="marke">Seit Wechsel</span>
             <span className="fakt-wert tabular">{dauerText(jetzt - seitWechsel)}</span>
           </div>
           <div className="fakt">
-            <span className="marke">Antwortzeit · {Math.round(letzteProbe)} ms</span>
+            <span className="marke">Antwortzeit</span>
+            <span className="fakt-wert tabular klein">{Math.round(letzteProbe)} ms</span>
             <svg className="funken" viewBox={`0 0 ${PROBEN_MAX * 5} 26`} preserveAspectRatio="none" aria-hidden="true">
               {proben.map((p, i) => {
                 const hoehe = Math.max(2, (p / probenMax) * 24);
@@ -259,7 +256,6 @@ export function App() {
         {geladen && links.length === 0 ? (
           <div className="leer">
             <p>Noch keine Kurzlinks.</p>
-            <p className="leer-hinweis">Ziel-URL oben eintragen und anlegen — der Rest passiert hier.</p>
           </div>
         ) : (
           <table data-testid="tabelle-links">
