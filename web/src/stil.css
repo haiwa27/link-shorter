@@ -1,112 +1,456 @@
+/* healthgate -- Oberflaeche
+ *
+ * Haltung: hell und flach, tiefe Tinte statt Schwarz, IBM Plex Mono fuer alles
+ * Maschinelle (Slug, Version, Zaehler) und Hanken Grotesk fuer Fliesstext.
+ * Die Slot-Farben sind nicht dekorativ: blau ist blau, gruen ist gruen, weil
+ * genau das die Bezeichnung des bedienenden Slots ist.
+ */
+
 :root {
-  --hintergrund: #14213d;
-  --flaeche: #1c2b4a;
-  --text: #f4f5f7;
-  --gedaempft: #9aa6bf;
-  --akzent: #4c8dff;
-  --fehler: #ff6b6b;
-  font-family: system-ui, sans-serif;
+  --tinte: #16202e;
+  --tinte-leise: #5c6a7d;
+  --papier: #f5f6f4;
+  --karte: #ffffff;
+  --linie: #dfe1dc;
+  --slot-blau: #2563a8;
+  --slot-gruen: #1c7a58;
+  --warnung: #a8321e;
+
+  --schrift: "Hanken Grotesk", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", monospace;
+
+  --radius: 4px;
+  --takt: 180ms;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  background: var(--hintergrund);
-  color: var(--text);
+  background: var(--papier);
+  color: var(--tinte);
+  font-family: var(--schrift);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
-main {
-  max-width: 56rem;
+.tabular {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.versteckt {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.rahmen {
+  max-width: 68rem;
   margin: 0 auto;
-  padding: 2rem 1.25rem 4rem;
+  padding: 1.5rem 1.25rem 5rem;
 }
 
-h1 {
-  letter-spacing: -0.02em;
+/* ---------- Zustandsschild: die Signatur der Oberflaeche ---------------- */
+
+.schild {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2rem;
+  padding: 0.75rem 1.25rem;
+  background: var(--karte);
+  border: 1px solid var(--linie);
+  border-left: 5px solid var(--tinte-leise);
+  border-radius: var(--radius);
+  transition: border-left-color var(--takt) ease, box-shadow var(--takt) ease;
 }
 
-.hinweis {
-  color: var(--gedaempft);
+.schild.ist-blau {
+  border-left-color: var(--slot-blau);
 }
 
-.karte {
+.schild.ist-gruen {
+  border-left-color: var(--slot-gruen);
+}
+
+.schild.wechselt {
+  animation: aufmerken 900ms ease-out;
+}
+
+@keyframes aufmerken {
+  0% {
+    box-shadow: 0 0 0 0 rgba(22, 32, 46, 0.18);
+  }
+  100% {
+    box-shadow: 0 0 0 14px rgba(22, 32, 46, 0);
+  }
+}
+
+.schild-feld {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.schild-marke {
+  font-size: 0.68rem;
+  font-weight: 500;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--tinte-leise);
+}
+
+.schild-wert {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+.schild-hinweis {
+  margin-left: auto;
+  padding: 0.15rem 0.55rem;
+  border: 1px solid var(--linie);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--tinte-leise);
+}
+
+.punkt {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tinte-leise);
+}
+
+.punkt-gut {
+  background: var(--slot-gruen);
+}
+
+.punkt-schlecht {
+  background: var(--warnung);
+}
+
+/* ---------- Kopf ------------------------------------------------------- */
+
+.kopf {
+  margin: 2.75rem 0 1.75rem;
+  max-width: 44rem;
+}
+
+.kopf h1 {
+  margin: 0 0 0.35rem;
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.kopf p {
+  margin: 0;
+  color: var(--tinte-leise);
+}
+
+/* ---------- Aufteilung ------------------------------------------------- */
+
+.spalten {
   display: grid;
-  gap: 0.5rem;
-  background: var(--flaeche);
+  grid-template-columns: 20rem 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.werkbank,
+.liste {
+  background: var(--karte);
+  border: 1px solid var(--linie);
+  border-radius: var(--radius);
   padding: 1.25rem;
-  border-radius: 0.5rem;
-  margin-bottom: 2rem;
 }
 
-label {
-  font-size: 0.85rem;
-  color: var(--gedaempft);
+.werkbank h2,
+.liste h2 {
+  margin: 0 0 1rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--tinte-leise);
 }
 
-input {
-  padding: 0.6rem 0.75rem;
-  border: 1px solid #2f4166;
-  border-radius: 0.35rem;
-  background: #101a30;
-  color: var(--text);
+/* ---------- Werkbank -------------------------------------------------- */
+
+.werkbank label {
+  display: block;
+  margin-bottom: 0.3rem;
+  font-size: 0.83rem;
+  font-weight: 500;
+}
+
+.werkbank input {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  margin-bottom: 0.9rem;
+  border: 1px solid var(--linie);
+  border-radius: var(--radius);
+  background: var(--papier);
+  color: var(--tinte);
+  font-family: inherit;
+  font-size: 0.9rem;
+  transition: border-color var(--takt) ease, background var(--takt) ease;
+}
+
+.werkbank input:focus {
+  outline: 2px solid var(--slot-blau);
+  outline-offset: 1px;
+  border-color: var(--slot-blau);
+  background: var(--karte);
+}
+
+.werkbank input::placeholder {
+  color: #a6aeb9;
+}
+
+.beiwerk {
+  font-size: 0.76rem;
+  font-weight: 400;
+  color: var(--tinte-leise);
+}
+
+.werkbank p.beiwerk {
+  margin: -0.55rem 0 1.1rem;
 }
 
 button {
-  justify-self: start;
-  margin-top: 0.5rem;
-  padding: 0.6rem 1.1rem;
-  border: 0;
-  border-radius: 0.35rem;
-  background: var(--akzent);
-  color: #04122c;
-  font-weight: 600;
+  padding: 0.5rem 0.95rem;
+  border: 1px solid var(--tinte);
+  border-radius: var(--radius);
+  background: var(--tinte);
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-weight: 500;
   cursor: pointer;
+  transition: background var(--takt) ease, border-color var(--takt) ease;
+}
+
+button:hover:not(:disabled) {
+  background: #223047;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--slot-blau);
+  outline-offset: 2px;
 }
 
 button:disabled {
-  opacity: 0.5;
+  background: #c9ced6;
+  border-color: #c9ced6;
   cursor: not-allowed;
 }
 
+button.still {
+  padding: 0.25rem 0.55rem;
+  background: transparent;
+  border-color: var(--linie);
+  color: var(--tinte-leise);
+  font-size: 0.8rem;
+}
+
+button.still:hover:not(:disabled) {
+  background: var(--papier);
+  border-color: var(--tinte-leise);
+  color: var(--tinte);
+}
+
 .fehler {
-  color: var(--fehler);
-  margin: 0.25rem 0 0;
+  margin: 0.9rem 0 0;
+  padding: 0.55rem 0.7rem;
+  border-left: 3px solid var(--warnung);
+  background: #fdf3f1;
+  color: #7f2617;
+  font-size: 0.85rem;
+}
+
+.quittung {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.9rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px dashed var(--linie);
+  border-radius: var(--radius);
+}
+
+.quittung code {
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+
+.quittung button {
+  margin-left: auto;
+}
+
+/* ---------- Liste ----------------------------------------------------- */
+
+.liste-kopf {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.liste-kopf h2 {
+  margin-bottom: 1rem;
+}
+
+.zahl {
+  margin-bottom: 1rem;
+  font-size: 0.78rem;
+  color: var(--tinte-leise);
+}
+
+.leer {
+  margin: 0;
+  padding: 2rem 0 1.5rem;
+  color: var(--tinte-leise);
+  text-align: center;
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-}
-
-th,
-td {
-  text-align: left;
-  padding: 0.55rem 0.5rem;
-  border-bottom: 1px solid #2a3a5c;
-  font-size: 0.9rem;
+  table-layout: fixed;
 }
 
 th {
-  color: var(--gedaempft);
+  padding: 0 0.5rem 0.4rem;
+  border-bottom: 1px solid var(--linie);
+  font-size: 0.7rem;
   font-weight: 500;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--tinte-leise);
+  text-align: left;
 }
 
+td {
+  padding: 0.7rem 0.5rem;
+  border-bottom: 1px solid #eceee9;
+  font-size: 0.88rem;
+  vertical-align: middle;
+}
+
+tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+tbody tr:hover td {
+  background: #fafbf9;
+}
+
+th:first-child,
+td:first-child {
+  width: 9.5rem;
+  padding-left: 0;
+}
+
+th.rechts,
+td.rechts {
+  text-align: right;
+}
+
+td.rechts:last-child,
+th:last-child {
+  width: 5.5rem;
+  padding-right: 0;
+}
+
+th:nth-child(3),
+td:nth-child(3) {
+  width: 5rem;
+}
+
+.marke {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--linie);
+  border-radius: var(--radius);
+  background: var(--papier);
+  color: var(--slot-blau);
+  font-size: 0.83rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.marke:hover {
+  border-color: var(--slot-blau);
+  text-decoration: underline;
+}
+
+.marke:focus-visible {
+  outline: 2px solid var(--slot-blau);
+  outline-offset: 1px;
+}
+
+/* Kuerzung ausschliesslich per CSS: der Textinhalt bleibt vollstaendig, weil
+ * die E2E-Tests die ganze Ziel-URL in der Zeile erwarten. */
 td.ziel {
-  color: var(--gedaempft);
-  max-width: 24rem;
+  color: var(--tinte-leise);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-a {
-  color: var(--akzent);
+/* ---------- Kleine Schirme ------------------------------------------- */
+
+@media (max-width: 760px) {
+  .spalten {
+    grid-template-columns: 1fr;
+  }
+
+  .schild {
+    gap: 1.1rem;
+  }
+
+  .schild-hinweis {
+    margin-left: 0;
+  }
+
+  .kopf {
+    margin-top: 2rem;
+  }
+
+  .kopf h1 {
+    font-size: 1.6rem;
+  }
+
+  th:nth-child(2),
+  td:nth-child(2) {
+    display: none;
+  }
+
+  th:first-child,
+  td:first-child {
+    width: auto;
+  }
+
+  .leer {
+    text-align: left;
+  }
 }
 
-td button {
-  margin: 0;
-  padding: 0.3rem 0.6rem;
-  background: transparent;
-  color: var(--gedaempft);
-  border: 1px solid #2f4166;
-  font-weight: 400;
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
 }
