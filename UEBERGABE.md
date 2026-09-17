@@ -18,6 +18,7 @@ wurde nichts geändert.
 | [#11](https://github.com/haiwa27/healthgate/pull/11) | Q-03, Q-06 | Coverage-Schwelle 65 Prozent, Testdatenbank, JUnit-Berichte | offen |
 | [#12](https://github.com/haiwa27/healthgate/pull/12) | O-04, O-05 | Grafana-Dashboard als Provisioning-Datei, Deployment-Marker | offen |
 | [#13](https://github.com/haiwa27/healthgate/pull/13) | D-01 | diese Datei | offen |
+| [#14](https://github.com/haiwa27/healthgate/pull/14) | C-04 | `safe.directory` und Rettung der `active-slot.conf` beim Checkout | offen |
 
 In alle vier offenen Branches ist `main` nach dem Merge von #10 hineingezogen
 worden, die Konflikte sind aufgelöst. Sie lassen sich in beliebiger Reihenfolge
@@ -115,33 +116,35 @@ angefasst.
 
 ## Was nicht funktioniert hat
 
-### Die Deploy-Stages sind ungeprüft -- eine Berechtigung fehlt
+### Die Deploy-Stages sind noch in keinem Build gelaufen
 
-Der Jenkins-Benutzer kommt nicht an `/home/admin/healthgate`:
+Die Berechtigung, an der sie zunächst scheiterten, ist inzwischen eingerichtet:
 
-    $ ls -ld /home/admin
-    drwxr-x--- 10 admin admin ... /home/admin
     $ id jenkins
-    uid=109(jenkins) gid=112(jenkins) groups=112(jenkins),988(docker)
+    uid=109(jenkins) gid=112(jenkins) groups=112(jenkins),110(admin),988(docker)
 
-`jenkins` ist weder in der Gruppe `admin` noch kann er das Verzeichnis
-durchqueren. Damit können die Stages ab *Deployment-Verzeichnis prüfen* nicht
-laufen -- sie sind geschrieben, aber nicht in einem echten Build erprobt.
+`/home/admin/healthgate` ist für Jenkins damit über die Gruppe beschreibbar,
+ohne `sudo`-Rechte. `active-slot.conf`, `historie.tsv` und `vorheriger-slot`
+gehören der Gruppe `jenkins` und sind schreibbar; `/home/admin/healthgate/.env`
+bleibt mit Rechten 600 unlesbar, die Pipeline benutzt `/etc/healthgate/.env`.
 
-Der nötige Eingriff ist eine Änderung an der Gruppenzugehörigkeit eines
-Systembenutzers. Die war mir in dieser Sitzung nicht erlaubt; sie gehört auch
-zu den Dingen, die jemand bewusst entscheiden sollte:
+Beim Nachprüfen kamen zwei Dinge heraus, die PR #14 behebt:
 
-    sudo usermod -aG admin jenkins
-    sudo systemctl restart jenkins
+1. **git verweigert die Arbeit im fremden Verzeichnis.** `dubious ownership`,
+   weil das Verzeichnis `admin` gehört. Die Ausnahme steht jetzt als
+   `safe.directory` im `environment`-Block der beiden betroffenen Stages und
+   nicht in der gitconfig des Agenten (E-021). Als Umgebungsvariable geprüft:
+   `git -C /home/admin/healthgate log` läuft als Benutzer `jenkins` durch.
+2. **Der erste Checkout hätte den aktiven Slot zurückgesetzt.** Das Deployment
+   steht auf einem Stand, in dem `active-slot.conf` noch versioniert ist; der
+   Checkout auf den neuen Stand entfernt die Datei, und aus der Vorlage neu
+   angelegt zeigte sie auf `blue`, während Produktion auf `grün` läuft. Die
+   Stage sichert die Datei jetzt vorher und stellt sie danach wieder her.
+   In einem Klon des Deployment-Verzeichnisses durchgespielt: vorher `green`,
+   nach dem Checkout `green`, Arbeitsverzeichnis sauber.
 
-Der Neustart ist nötig, weil ein laufender Dienst seine Gruppen nicht neu
-einliest. Danach ist `/home/admin/healthgate` über die Gruppe beschreibbar --
-ohne `sudo`-Rechte für Jenkins. `/home/admin/healthgate/.env` bleibt mit Rechten
-600 für `admin` unlesbar; die Pipeline benutzt ohnehin `/etc/healthgate/.env`.
-
-Die Stage *Deployment-Verzeichnis prüfen* bricht mit genau diesem Hinweis ab,
-wenn das Recht fehlt -- und zwar vor der Freigabe, nicht mitten im Umschalten.
+Was bleibt: ein echter Durchlauf auf `main`. Erst der zeigt, ob Bespielen,
+Umschalten und Beobachtungsfenster zusammen tragen.
 
 **Was stattdessen geprüft wurde**, damit der ungeprüfte Teil so klein wie
 möglich bleibt:
@@ -195,9 +198,9 @@ Alle in `docs/entscheidungen.md` mit Alternativen und Begründung:
 1. **Die vier offenen PRs prüfen und mergen.** Jeder PR gehört der jeweils
    anderen Person zum Review -- sie stammen alle aus derselben Sitzung und haben
    noch niemanden gesehen.
-2. **Die Gruppenzugehörigkeit von `jenkins` einrichten** (Befehl oben) und einen
-   Build auf `main` auslösen. Danach hält die Pipeline bei *Freigabe für
-   Produktion* an; die Freigabe gibt eine Person, nicht die Pipeline.
+2. **Nach #14 einen Build auf `main` auslösen.** Danach hält die Pipeline bei
+   *Freigabe für Produktion* an; die Freigabe gibt eine Person, nicht die
+   Pipeline. Die Gruppenzugehörigkeit von `jenkins` ist bereits eingerichtet.
 3. **Den ersten vollständigen Durchlauf begleiten.** Beim ersten Deployment nach
    dem Merge von #10 wird der Caddy-Container einmal neu erzeugt, weil sich sein
    Mount ändert. Das dauert Sekunden, ist aber der einzige Moment, in dem der
