@@ -48,7 +48,12 @@ func Laden() (Konfiguration, error) {
 		if cfg.Version == "" || cfg.Version == "dev" {
 			return cfg, fmt.Errorf("HEALTHGATE_VERSION muss in Produktion gesetzt sein")
 		}
-		// TODO(P-01): sobald PostgreSQL angebunden ist, hier DatenbankURL erzwingen.
+		// Ohne gemeinsame Datenbank hielte jeder Slot eigene Daten. Das
+		// Umschalten wäre dann aus Sicht der Nutzer ein Datenverlust, ohne dass
+		// irgendein Health-Check darauf anspringt (Story P-01).
+		if cfg.DatenbankURL == "" {
+			return cfg, fmt.Errorf("HEALTHGATE_DB_URL muss in Produktion gesetzt sein")
+		}
 	}
 
 	return cfg, nil

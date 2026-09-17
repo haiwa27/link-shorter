@@ -34,3 +34,29 @@ func TestLadenUngueltigeChaosRate(t *testing.T) {
 		t.Fatal("erwartet: Fehler bei ChaosRate ausserhalb 0 bis 1")
 	}
 }
+
+func TestLadenProduktionOhneDatenbankSchlaegtFehl(t *testing.T) {
+	t.Setenv("HEALTHGATE_UMGEBUNG", "prod")
+	t.Setenv("HEALTHGATE_SLOT", "blue")
+	t.Setenv("HEALTHGATE_VERSION", "abc1234")
+	t.Setenv("HEALTHGATE_DB_URL", "")
+
+	if _, err := Laden(); err == nil {
+		t.Fatal("erwartet: Fehler ohne HEALTHGATE_DB_URL in Produktion")
+	}
+}
+
+func TestLadenProduktionMitDatenbankIstGueltig(t *testing.T) {
+	t.Setenv("HEALTHGATE_UMGEBUNG", "prod")
+	t.Setenv("HEALTHGATE_SLOT", "green")
+	t.Setenv("HEALTHGATE_VERSION", "abc1234")
+	t.Setenv("HEALTHGATE_DB_URL", "postgres://nutzer:geheim@db:5432/healthgate?sslmode=disable")
+
+	cfg, err := Laden()
+	if err != nil {
+		t.Fatalf("unerwarteter Fehler: %v", err)
+	}
+	if cfg.Slot != "green" {
+		t.Errorf("Slot: erwartet green, erhalten %q", cfg.Slot)
+	}
+}
