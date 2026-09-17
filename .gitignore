@@ -26,3 +26,7 @@ node_modules/
 
 # Lokale Sperrliste des pre-commit-Hooks
 .git-verbotene-muster
+
+# Testberichte
+/app/test-report.xml
+/app/test.log
