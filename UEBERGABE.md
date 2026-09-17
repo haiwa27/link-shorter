@@ -1,8 +1,8 @@
 # Übergabe
 
 Stand: 17.09.2026. Fünf Stories umgesetzt, jede als eigener Branch mit eigenem
-Pull Request. **#10 ist gemerged**, die übrigen warten auf euer Review -- die
-Freigabe liegt bei euch.
+Pull Request. **#10, #14 und #9 sind gemerged**, drei warten auf euer Review --
+die Freigabe liegt bei euch.
 
 Produktion lief während der gesamten Arbeit durch: Slot grün, Version `fdbce28`,
 `curl localhost/healthz` nach jedem Eingriff geprüft. An `/etc/healthgate/.env`,
@@ -13,31 +13,32 @@ wurde nichts geändert.
 
 | PR | Story | Inhalt | Build |
 |---|---|---|---|
-| [#9](https://github.com/haiwa27/healthgate/pull/9) | P-01 | PostgreSQL als Speicher hinter `store.Speicher` | grün (Build 2) |
 | [#10](https://github.com/haiwa27/healthgate/pull/10) | C-02, C-04 | Pipeline bis einschliesslich E2E, Deploy gegen `/home/admin/healthgate` | **gemerged** |
-| [#11](https://github.com/haiwa27/healthgate/pull/11) | Q-03, Q-06 | Coverage-Schwelle 65 Prozent, Testdatenbank, JUnit-Berichte | grün (Build 3) |
-| [#12](https://github.com/haiwa27/healthgate/pull/12) | O-04, O-05 | Grafana-Dashboard als Provisioning-Datei, Deployment-Marker | grün (Build 3) |
-| [#13](https://github.com/haiwa27/healthgate/pull/13) | D-01 | diese Datei | grün (Build 3) |
-| [#14](https://github.com/haiwa27/healthgate/pull/14) | C-04 | `safe.directory`, Rettung der `active-slot.conf`, Staging je Branch | grün (Build 2) |
+| [#14](https://github.com/haiwa27/healthgate/pull/14) | C-04 | `safe.directory`, Rettung der `active-slot.conf`, Staging je Branch | **gemerged** |
+| [#9](https://github.com/haiwa27/healthgate/pull/9) | P-01 | PostgreSQL als Speicher hinter `store.Speicher` | **gemerged** |
+| [#11](https://github.com/haiwa27/healthgate/pull/11) | Q-03, Q-06 | Coverage-Schwelle 65 Prozent, Testdatenbank, JUnit-Berichte | grün (Build 4) |
+| [#12](https://github.com/haiwa27/healthgate/pull/12) | O-04, O-05 | Grafana-Dashboard als Provisioning-Datei, Deployment-Marker | offen |
+| [#13](https://github.com/haiwa27/healthgate/pull/13) | D-01 | diese Datei | offen |
 
-In alle offenen Branches ist `main` nach dem Merge von #10 hineingezogen worden,
-die Konflikte sind aufgelöst, alle fünf Builds sind grün.
-
-**#14 zuerst mergen**: `main` scheitert derzeit an der Stage
-*Deployment-Verzeichnis prüfen*, und genau das behebt #14. Danach #9, dann #11,
-dann #12, dann #13. #11 setzt die Coverage-Schwelle auf einen Wert, den erst die
-Tests aus #9 vollständig tragen.
+**Reihenfolge: #11, dann #12, dann #13.** Die drei sind aufeinander gestapelt --
+#12 enthält #11, #13 enthält beide. Dadurch bleibt jeder Merge konfliktfrei,
+statt dass nach jedem Merge in `main` erneut dieselbe Stelle kollidiert. Die PR-
+Ansicht von #12 zeigt bis zum Merge von #11 dessen Änderungen mit; danach bereinigt
+sie sich von selbst.
 
 ### Wie die Konflikte aufgelöst wurden
 
-- `docs/entscheidungen.md`: beide Seiten behalten, Einträge in der Reihenfolge
-  E-012 bis E-020 sortiert. Jeder Branch hatte seine Entscheidungen ans Dateiende
-  angehängt, während `main` dort inzwischen andere stehen hatte.
-- `Jenkinsfile` (#11): der `environment`-Block enthält jetzt beides -- die
-  Grenzwerte des Health-Gates aus #10 und `COVERAGE_SCHWELLE`,
-  `JUNIT_REPORT_VERSION` und `TEST_DB` aus #11.
-- `README.md` (#11): die Stage-Tabelle aus #10 mit der Spalte *Arbeitet in*
-  bleibt; die Zeile *Unit-Tests* trägt die Beschreibung aus #11.
+Kollidiert ist immer dasselbe: jeder Branch hängt seine Entscheidungen ans Ende
+von `docs/entscheidungen.md` und streicht in der README einen Punkt aus der Liste
+der offenen Themen.
+
+- `docs/entscheidungen.md`: beide Seiten behalten, Einträge nach Nummer sortiert
+  (E-008 bis E-022).
+- `README.md`: unter *Für spätere Iterationen vorgesehen* fällt jeder Punkt weg,
+  dessen Story gemerged ist -- nicht der eine oder der andere, sondern beide.
+- `Jenkinsfile` (#11): der `environment`-Block enthält beides -- die Grenzwerte
+  des Health-Gates aus #10 und `COVERAGE_SCHWELLE`, `JUNIT_REPORT_VERSION` und
+  `TEST_DB` aus #11.
 - `.gitignore` (#11): beide Blöcke, Testberichte und aktiver Slot.
 
 ## Was erledigt ist
@@ -205,16 +206,19 @@ Alle in `docs/entscheidungen.md` mit Alternativen und Begründung:
 
 ## Was als Nächstes zu tun ist
 
-1. **Die vier offenen PRs prüfen und mergen.** Jeder PR gehört der jeweils
-   anderen Person zum Review -- sie stammen alle aus derselben Sitzung und haben
-   noch niemanden gesehen.
-2. **Nach #14 einen Build auf `main` auslösen.** Danach hält die Pipeline bei
-   *Freigabe für Produktion* an; die Freigabe gibt eine Person, nicht die
-   Pipeline. Die Gruppenzugehörigkeit von `jenkins` ist bereits eingerichtet.
-3. **Den ersten vollständigen Durchlauf begleiten.** Beim ersten Deployment nach
-   dem Merge von #10 wird der Caddy-Container einmal neu erzeugt, weil sich sein
-   Mount ändert. Das dauert Sekunden, ist aber der einzige Moment, in dem der
-   Proxy kurz weg ist. Danach läuft der Wechsel wieder ohne Unterbrechung.
+1. **#11, #12 und #13 in dieser Reihenfolge prüfen und mergen.** Jeder PR gehört
+   der jeweils anderen Person zum Review -- sie stammen alle aus derselben
+   Sitzung und haben noch niemanden gesehen.
+2. **Einen Build auf `main` auslösen und freigeben.** Jeder Merge löst ohnehin
+   einen aus; die Zwischenläufe warten 15 Minuten bei *Freigabe für Produktion*
+   und brechen dann von selbst ab, ohne etwas anzufassen. Sinnvoll ist, nur den
+   letzten Lauf freizugeben -- dann geht genau ein Deployment mit allem darin
+   raus. Die Freigabe gibt eine Person, nicht die Pipeline.
+3. **Den ersten vollständigen Durchlauf begleiten.** Beim ersten Deployment wird
+   der Caddy-Container einmal neu erzeugt, weil sich sein Mount von zwei
+   Einzeldateien auf das Verzeichnis ändert. Das dauert Sekunden, ist aber der
+   einzige Moment, in dem der Proxy kurz weg ist. Danach läuft der Wechsel wieder
+   ohne Unterbrechung.
 4. **Nach dem Merge von #12 das Monitoring neu laden**, damit Grafana das
    Dashboard einliest:
 
