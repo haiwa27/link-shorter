@@ -30,3 +30,6 @@ node_modules/
 # Testberichte
 /app/test-report.xml
 /app/test.log
+
+# Aktiver Slot: Laufzeitzustand, wird aus der Vorlage erzeugt
+/deploy/caddy/active-slot.conf
