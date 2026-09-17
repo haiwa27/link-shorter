@@ -26,3 +26,6 @@ node_modules/
 
 # Lokale Sperrliste des pre-commit-Hooks
 .git-verbotene-muster
+
+# Aktiver Slot: Laufzeitzustand, wird aus der Vorlage erzeugt
+/deploy/caddy/active-slot.conf

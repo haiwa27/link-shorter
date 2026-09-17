@@ -3,10 +3,11 @@ name: healthgate-prod
 # Beide Slots laufen gleichzeitig (Story R-01). Nur einer bekommt Verkehr --
 # welcher, entscheidet die Datei caddy/active-slot.conf.
 
+# Kein build hier: das Image wird einmal gebaut, gegen Staging geprueft und
+# genau so nach Produktion gestellt. Baute Produktion neu, waere das
+# ausgelieferte Artefakt ein anderes als das getestete (Entscheidung E-013).
 x-app: &app
-  build:
-    context: ..
-    dockerfile: app/Dockerfile
+  image: ${HEALTHGATE_IMAGE:?HEALTHGATE_IMAGE muss gesetzt sein, z.B. healthgate:abc1234}
   environment: &app-env
     HEALTHGATE_UMGEBUNG: prod
     HEALTHGATE_DB_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
@@ -37,8 +38,11 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - ./caddy/active-slot.conf:/etc/caddy/active-slot.conf:ro
+      # Das ganze Verzeichnis und nicht die einzelnen Dateien: ein Mount auf
+      # eine Einzeldatei haengt an deren Inode. Wird die Datei ersetzt statt
+      # ueberschrieben -- was jedes git checkout und jedes mv tut -- sieht der
+      # Container weiter den alten Inhalt, ohne dass etwas fehlschlaegt.
+      - ./caddy:/etc/caddy:ro
     depends_on:
       - app-blue
       - app-green

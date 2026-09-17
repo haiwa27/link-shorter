@@ -2,7 +2,9 @@ SHELL := /bin/bash
 COMPOSE := docker compose
 SHA := $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
 
-.PHONY: help dev build test lint e2e staging-up staging-down prod-up prod-down \
+IMAGE := healthgate:$(SHA)
+
+.PHONY: help dev build image test lint e2e staging-up staging-down prod-up prod-down \
         monitoring-up monitoring-down switch observe rollback clean
 
 help:
@@ -26,14 +28,21 @@ lint: ## Statische Analyse
 e2e: ## Playwright gegen die Basis-URL aus BASIS_URL
 	cd tests/e2e && npx playwright test
 
-staging-up: ## Staging starten
-	$(COMPOSE) -f deploy/docker-compose.staging.yml --env-file .env up -d --build
+image: ## Image bauen; Staging und Produktion verwenden genau dieses Artefakt
+	docker build -f app/Dockerfile -t $(IMAGE) .
+
+staging-up: image ## Staging starten
+	HEALTHGATE_IMAGE=$(IMAGE) HEALTHGATE_VERSION=$(SHA) \
+		$(COMPOSE) -f deploy/docker-compose.staging.yml --env-file .env up -d
 
 staging-down:
 	$(COMPOSE) -f deploy/docker-compose.staging.yml down
 
-prod-up: ## Produktion mit beiden Slots starten
-	VERSION_BLUE=$(SHA) VERSION_GREEN=$(SHA) $(COMPOSE) -f deploy/docker-compose.prod.yml --env-file .env up -d --build
+prod-up: image ## Produktion mit beiden Slots starten
+	@test -f deploy/caddy/active-slot.conf || \
+		cp deploy/caddy/active-slot.conf.vorlage deploy/caddy/active-slot.conf
+	HEALTHGATE_IMAGE=$(IMAGE) VERSION_BLUE=$(SHA) VERSION_GREEN=$(SHA) \
+		$(COMPOSE) -f deploy/docker-compose.prod.yml --env-file .env up -d
 
 prod-down:
 	$(COMPOSE) -f deploy/docker-compose.prod.yml down
