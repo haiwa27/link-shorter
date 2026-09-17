@@ -4,6 +4,16 @@ apiVersion: 1
 # Dashboard-Dateien verweisen darauf. Ohne feste uid erzeugt Grafana bei jeder
 # Neuinstallation eine andere, und die provisionierten Dashboards zeigen auf
 # eine Datenquelle, die es nicht gibt.
+
+# Eine bereits vorhandene Datenquelle gleichen Namens trägt eine zufällig
+# vergebene uid. Grafana kann sie nicht auf eine feste uid umstellen und bricht
+# beim Start ab -- "Datasource provisioning error: data source not found", in
+# einer Neustartschleife. Deshalb wird sie zuerst entfernt und danach neu
+# angelegt. Für eine frische Installation ist der Block wirkungslos (E-025).
+deleteDatasources:
+  - name: Prometheus
+    orgId: 1
+
 datasources:
   - name: Prometheus
     uid: prometheus
