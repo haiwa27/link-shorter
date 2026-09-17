@@ -300,3 +300,21 @@ Jede Entscheidung, die im Vortrag eine Frage auslösen könnte, gehört hierher.
   das Ganze durch `fatal: could not read Username for 'https://github.com'` --
   der Jenkins-Benutzer hat schlicht keine Anmeldung, der Git-Plugin-Checkout
   bringt seine eigene mit.
+
+## E-024: Die Slot-Datei gehört beiden Schreibern, nicht dem zuletzt Schreibenden
+
+- **Alternativen:** das Umschalten ausschliesslich der Pipeline überlassen;
+  Jenkins per `sudo` als Betriebsbenutzer schreiben lassen
+- **Entscheidung:** `umask 002` in `switch-slot.sh`, `chmod 664` beim Anlegen,
+  und das setgid-Bit auf `deploy/caddy` und `deploy/state` auf der Maschine
+- **Begründung:** `active-slot.conf` wird von zwei Benutzern geschrieben: von
+  der Pipeline und von einem Menschen, der von Hand umschaltet oder zurückrollt.
+  Legt einer von beiden die Datei neu an, erbt sie dessen Rechte und Gruppe --
+  beim ersten Deployment war das `jenkins:jenkins` mit `600`, und danach
+  scheiterte jeder Handgriff an `Permission denied`. Besonders unangenehm, weil
+  Caddy die Datei als root im Container weiterlesen kann: von aussen sah alles
+  gesund aus, nur der Rollback von Hand war still kaputt. Das setgid-Bit sorgt
+  dafür, dass neue Dateien die Gruppe des Verzeichnisses erben, `umask 002` und
+  `chmod 664` dafür, dass die Gruppe schreiben darf. Der Weg über `sudo` wurde
+  verworfen: die Pipeline soll keine erhöhten Rechte bekommen, um eine
+  Textdatei zu schreiben.

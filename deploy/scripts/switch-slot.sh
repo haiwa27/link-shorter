@@ -4,6 +4,12 @@
 # Aufruf: switch-slot.sh <blue|green>
 set -euo pipefail
 
+# Die Slot-Datei wird abwechselnd von einem Menschen und von der Pipeline
+# geschrieben, also von zwei verschiedenen Benutzern. Ohne diese Maske legt der
+# eine sie mit 600 an und der andere kommt nicht mehr heran -- das Umschalten
+# von Hand scheitert dann an einem "Permission denied" (Entscheidung E-024).
+umask 002
+
 ZIEL="${1:?Slot fehlt (blue|green)}"
 if [ "$ZIEL" != "blue" ] && [ "$ZIEL" != "green" ]; then
 	echo "FEHLER: Slot muss blue oder green sein, ist '$ZIEL'" >&2
@@ -21,6 +27,9 @@ CADDY_CONTAINER="${CADDY_CONTAINER:-healthgate-prod-caddy-1}"
 if [ ! -f "$KONF" ]; then
 	echo "Hinweis: $KONF fehlt, wird aus der Vorlage angelegt."
 	cp "$KONF.vorlage" "$KONF"
+	# cp übernimmt die Rechte der Vorlage; hier zählt, dass die Gruppe
+	# schreiben darf.
+	chmod 664 "$KONF" 2>/dev/null || true
 fi
 
 VORHER="$("$HIER/active-slot.sh")"

@@ -318,6 +318,10 @@ pipeline {
 							cp "$KONF.vorlage" "$KONF"
 							echo "Hinweis: aktiver Slot aus der Vorlage angelegt"
 						fi
+						# Die Datei stammt hier aus einer Kopie und traegt sonst
+						# deren Rechte -- bei mktemp sind das 600. Danach kaeme
+						# kein Mensch mehr an die Datei heran (E-024).
+						chmod 664 "$KONF"
 					fi
 					rm -f "$RETTUNG"
 
