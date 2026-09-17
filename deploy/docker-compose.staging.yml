@@ -2,9 +2,9 @@ name: healthgate-staging
 
 services:
   app:
-    build:
-      context: ..
-      dockerfile: app/Dockerfile
+    # Dasselbe Image, das anschliessend nach Produktion geht. Staging prueft
+    # sonst etwas anderes als das, was ausgeliefert wird (Entscheidung E-013).
+    image: ${HEALTHGATE_IMAGE:?HEALTHGATE_IMAGE muss gesetzt sein, z.B. healthgate:abc1234}
     environment:
       HEALTHGATE_UMGEBUNG: staging
       HEALTHGATE_SLOT: staging
