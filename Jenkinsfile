@@ -20,7 +20,12 @@ pipeline {
 	environment {
 		SHA          = "${env.GIT_COMMIT?.take(7) ?: 'dev'}"
 		// Das Image trägt den Commit im Namen und wird genau einmal gebaut.
-		IMAGE        = "healthgate:${env.GIT_COMMIT?.take(7) ?: 'dev'}"
+		// Der Name ist zugleich die Variable, die beide Compose-Dateien lesen;
+		// so kann keine Stage versehentlich ein anderes Artefakt ausliefern.
+		HEALTHGATE_IMAGE = "healthgate:${env.GIT_COMMIT?.take(7) ?: 'dev'}"
+		// Version der E2E-Werkzeuge. Playwright läuft im eigenen Container,
+		// weil die Maschine Node 18 mitbringt und Playwright 20 verlangt.
+		PLAYWRIGHT_IMAGE = 'mcr.microsoft.com/playwright:v1.62.1-noble'
 		// TODO(C-05): eigene Registry eintragen. Platzhalter, damit hier kein
 		// echter Hostname im Repository steht.
 		REGISTRY     = 'registry.beispiel.de/healthgate'
@@ -110,7 +115,7 @@ pipeline {
 			steps {
 				// Zwei Namen für dasselbe Image: der lokale für die Auslieferung
 				// auf dieser Maschine, der Registry-Name für den späteren Push.
-				sh 'docker build -f app/Dockerfile -t ${IMAGE} -t ${REGISTRY}:${SHA} .'
+				sh 'docker build -f app/Dockerfile -t ${HEALTHGATE_IMAGE} -t ${REGISTRY}:${SHA} .'
 			}
 		}
 
@@ -127,8 +132,8 @@ pipeline {
 				// Staging läuft im Workspace: es ist eine Testumgebung und hält
 				// keinen Zustand, den ein frischer Checkout verlieren könnte.
 				sh '''
-					HEALTHGATE_IMAGE=${IMAGE} HEALTHGATE_VERSION=${SHA} \
-						docker compose -f deploy/docker-compose.staging.yml \
+					HEALTHGATE_VERSION=${SHA} docker compose \
+						-f deploy/docker-compose.staging.yml \
 						--env-file "${ENV_DATEI}" up -d
 				'''
 				sh 'deploy/scripts/wait-healthy.sh ${STAGING_URL} 3 30'
@@ -137,11 +142,20 @@ pipeline {
 
 		stage('E2E-Tests gegen Staging') {
 			steps {
-				dir('tests/e2e') {
-					sh 'npm ci'
-					sh 'npx playwright install chromium'
-					sh 'BASIS_URL=${STAGING_URL} npx playwright test'
-				}
+				// Playwright läuft im mitgelieferten Container: die Browser sind
+				// darin bereits installiert und passen zur Version aus dem
+				// Lockfile. Die Maschine selbst bleibt unangetastet (E-016).
+				// --network host, damit Staging unter localhost:8081 erreichbar
+				// ist; der Lauf als aufrufender Benutzer, damit die Artefakte
+				// nicht root gehören und Jenkins sie archivieren kann.
+				sh '''
+					docker run --rm --network host \
+						-v "$PWD/tests/e2e":/e2e -w /e2e \
+						-u "$(id -u):$(id -g)" -e HOME=/tmp \
+						-e CI=true -e BASIS_URL=${STAGING_URL} \
+						${PLAYWRIGHT_IMAGE} \
+						sh -c "npm ci && npx playwright test"
+				'''
 			}
 			post {
 				always {
@@ -208,9 +222,8 @@ pipeline {
 				// es gäbe kein Ziel mehr für einen Rollback.
 				sh '''
 					cd "${DEPLOY_DIR}"
-					HEALTHGATE_IMAGE=${IMAGE} docker compose \
-						-f deploy/docker-compose.prod.yml --env-file "${ENV_DATEI}" \
-						up -d --no-deps caddy
+					docker compose -f deploy/docker-compose.prod.yml \
+						--env-file "${ENV_DATEI}" up -d --no-deps caddy
 				'''
 			}
 		}
@@ -226,11 +239,11 @@ pipeline {
 				sh '''
 					cd "${DEPLOY_DIR}"
 					if [ "$ZIEL_SLOT" = "blue" ]; then
-						HEALTHGATE_IMAGE=${IMAGE} VERSION_BLUE=${SHA} docker compose \
+						VERSION_BLUE=${SHA} docker compose \
 							-f deploy/docker-compose.prod.yml --env-file "${ENV_DATEI}" \
 							up -d app-blue
 					else
-						HEALTHGATE_IMAGE=${IMAGE} VERSION_GREEN=${SHA} docker compose \
+						VERSION_GREEN=${SHA} docker compose \
 							-f deploy/docker-compose.prod.yml --env-file "${ENV_DATEI}" \
 							up -d app-green
 					fi

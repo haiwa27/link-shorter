@@ -126,3 +126,16 @@ Jede Entscheidung, die im Vortrag eine Frage auslösen könnte, gehört hierher.
   deren Inode. Ersetzt jemand die Datei, statt sie zu überschreiben -- was jedes
   `git checkout` tut -- sieht der Container weiter den alten Inhalt, und ein
   `caddy reload` lädt fröhlich die alte Konfiguration nach.
+
+## E-016: Playwright im mitgelieferten Container statt auf der Maschine
+
+- **Alternativen:** Node 20 auf der Maschine nachinstallieren,
+  `npx playwright install --with-deps` in der Pipeline
+- **Entscheidung:** `mcr.microsoft.com/playwright:<version>` als Container, mit
+  `--network host` gegen Staging
+- **Begründung:** Die Maschine bringt Node 18 mit, Playwright verlangt ab 1.50
+  mindestens Node 20. Eine Installation auf der Maschine wäre Zustand, den
+  niemand versioniert und der bei der nächsten Neuinstallation fehlt.
+  `--with-deps` bräuchte ausserdem root für apt. Der Container bringt Browser
+  und Systempakete in der Version mit, die zum Lockfile passt; die Pipeline
+  bleibt damit unabhängig davon, was auf dem Agenten installiert ist.
