@@ -282,3 +282,21 @@ Jede Entscheidung, die im Vortrag eine Frage auslösen könnte, gehört hierher.
   installiert ist, und serialisiert Builds, die sich gar nicht stören müssten.
   Der Preis ist ein Datenvolumen je Branch; es bleibt klein und wird beim
   Aufräumen des Branches mit entfernt.
+
+## E-023: Das Deployment-Verzeichnis holt den Stand aus dem Workspace, nicht von GitHub
+
+- **Alternativen:** `git fetch origin main` im Deployment-Verzeichnis, mit den
+  Zugangsdaten aus den Jenkins-Credentials über `withCredentials`
+- **Entscheidung:** `git fetch "${WORKSPACE}" HEAD`, anschliessend Checkout auf
+  den gebauten Commit
+- **Begründung:** Der Umweg über GitHub beantwortet die falsche Frage. Was
+  ausgeliefert werden soll, ist nicht "der aktuelle Stand von `main`", sondern
+  "der Stand, der gerade gebaut und gegen Staging geprüft wurde" -- und der liegt
+  bereits im Workspace. Zwischen dem Bauen und dem Umschalten kann `main`
+  weiterlaufen; der Fetch von GitHub lieferte dann einen anderen Stand als das
+  Image, das dieselbe Stage ausrollt. Nebeneffekte: die Auslieferung braucht
+  weder Netz noch Zugangsdaten für das private Repository, und kein Token muss
+  durch eine Shell wandern, wo es im Protokoll landen könnte. Aufgefallen ist
+  das Ganze durch `fatal: could not read Username for 'https://github.com'` --
+  der Jenkins-Benutzer hat schlicht keine Anmeldung, der Git-Plugin-Checkout
+  bringt seine eigene mit.

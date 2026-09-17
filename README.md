@@ -447,7 +447,7 @@ Auslieferung genauso reviewt wird wie eine Änderung am Code.
 | E2E-Tests gegen Staging | Playwright; Bericht und Spuren als Artefakt | Workspace |
 | Deployment-Verzeichnis prüfen | Schreibrecht und Stand des Deployments, nur auf `main` | Deployment |
 | Freigabe für Produktion | bewusste menschliche Entscheidung, nur auf `main` | — |
-| Deployment-Verzeichnis aktualisieren | Checkout des gebauten Commits; aktiver Slot bleibt unberührt | Deployment |
+| Deployment-Verzeichnis aktualisieren | Checkout des gebauten Commits aus dem Workspace; aktiver Slot bleibt unberührt | Deployment |
 | Reverse Proxy abgleichen | Caddy auf den geprüften Stand, ohne die Slots mitzuziehen | Deployment |
 | Zielslot bespielen | untätigen Slot mit dem gebauten Image starten | Deployment |
 | Prüfung vor dem Umschalten | dreimal `/healthz` direkt am Container | Deployment |
@@ -483,6 +483,11 @@ Weil das Verzeichnis dem Benutzer `admin` gehört und nicht Jenkins, verweigert
 git dort sonst jede Operation. Die Ausnahme steht als `safe.directory` im
 `environment`-Block der betroffenen Stages und nicht in der gitconfig des
 Agenten — sonst hinge die Pipeline an Zustand, den niemand versioniert (E-021).
+
+Zugangsdaten für GitHub braucht das Deployment-Verzeichnis keine: es holt den
+Stand aus dem Jenkins-Workspace, der bereits auf dem gebauten Commit steht. Das
+ist nicht nur bequemer, sondern richtiger — ausgeliefert werden soll der Stand,
+der gerade geprüft wurde, und nicht der, der inzwischen auf `main` liegt (E-023).
 
 **Merksatz:** Beim ersten Deployment nach dieser Umstellung entfernt der
 Checkout im Deployment-Verzeichnis die dort noch versionierte
