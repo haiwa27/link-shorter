@@ -67,6 +67,58 @@ Jede Entscheidung, die im Vortrag eine Frage auslösen könnte, gehört hierher.
   statt von Hand am Ende des Sprints. Der Zwang ist der Preis dafür; ohne
   einheitliche Form gäbe es kein maschinell erzeugtes Changelog.
 
+## E-008: pgx statt database/sql für den Zugriff auf PostgreSQL
+
+- **Alternativen:** `database/sql` mit `lib/pq` oder `pgx` im
+  `database/sql`-Modus, ORM wie GORM
+- **Entscheidung:** `github.com/jackc/pgx/v5` mit `pgxpool` direkt
+- **Begründung:** `database/sql` ist eine Abstraktion über mehrere Datenbanken,
+  die hier niemand braucht -- dafür kostet sie das Binärprotokoll von
+  PostgreSQL und die typisierten Fehler. Genau die werden gebraucht: der
+  SQLSTATE 23505 unterscheidet "Slug belegt" von "Datenbank kaputt", und ohne
+  ihn müsste die Fehlermeldung als Text geprüft werden. Ein ORM wäre für vier
+  Abfragen mehr Lernaufwand als Ersparnis; das Projekt soll SQL zeigen, nicht
+  verstecken.
+
+## E-009: Verbindungspool ohne Verbindungsaufbau beim Start
+
+- **Alternativen:** beim Start verbinden und bei Misserfolg abbrechen
+- **Entscheidung:** Pool anlegen, nicht verbinden; `Pruefen` macht den Ping
+- **Begründung:** Ein Abbruch beim Start hieße in Produktion: Container in der
+  Neustartschleife, beide Slots gleichzeitig weg, sobald die Datenbank kurz
+  hakt. So bleibt der Prozess stehen, `/healthz` meldet ehrlich 503, Caddy
+  nimmt den Slot aus dem Verkehr und er kommt von allein zurück. Die
+  Konfiguration bricht weiterhin hart ab, wenn `HEALTHGATE_DB_URL` in `prod`
+  fehlt -- ein Tippfehler in der Konfiguration soll auffallen, eine kurz
+  abwesende Datenbank nicht eskalieren.
+
+## E-010: Schema über die Migration beim Datenbankstart statt Migrationswerkzeug
+
+- **Alternativen:** golang-migrate als eigene Pipeline-Stage, Migration beim
+  Anwendungsstart aus dem Binary heraus
+- **Entscheidung:** `app/migrations/0001_init.sql` wird über
+  `docker-entrypoint-initdb.d` angewendet; die Datenbanktests wenden dieselbe
+  Datei an
+- **Begründung:** Für genau eine Tabelle ist ein Migrationswerkzeug Aufwand
+  ohne Gegenwert. Wichtig ist, dass es nur eine Schemaquelle gibt: die Tests
+  lesen dieselbe SQL-Datei, statt das Schema noch einmal zu definieren. Die
+  Grenze ist bekannt und bewusst in Kauf genommen: `initdb` läuft nur bei
+  leerem Volume, eine spätere Migration 0002 käme auf einer bestehenden
+  Datenbank nicht an. Sobald die zweite Migration ansteht, kommt golang-migrate
+  als eigene Stage vor dem Umschalten.
+
+## E-011: Datenbanktests gegen eine echte Wegwerf-Instanz statt gegen Attrappen
+
+- **Alternativen:** Attrappe der Schnittstelle, sqlmock
+- **Entscheidung:** PostgreSQL-Container in der Pipeline, Tests über
+  `HEALTHGATE_TEST_DB_URL` zuschaltbar
+- **Begründung:** Eine Attrappe bestätigt nur, dass der Code die Abfragen
+  absetzt, die er absetzt. Sie belegt weder, dass das SQL gültig ist, noch dass
+  ein doppelter Slug wirklich als `ErrBelegt` ankommt -- und genau diese
+  Übersetzung ist der Teil, der schiefgehen kann. Ohne gesetzte Variable
+  überspringen die Tests sich selbst, damit der lokale Lauf ohne Docker
+  weiterhin grün ist statt rot.
+
 ## E-012: Bauen im Workspace, Ausliefern gegen das Deployment-Verzeichnis
 
 - **Alternativen:** alles im Jenkins-Workspace; das Deployment-Verzeichnis per
@@ -139,3 +191,34 @@ Jede Entscheidung, die im Vortrag eine Frage auslösen könnte, gehört hierher.
   `--with-deps` bräuchte ausserdem root für apt. Der Container bringt Browser
   und Systempakete in der Version mit, die zum Lockfile passt; die Pipeline
   bleibt damit unabhängig davon, was auf dem Agenten installiert ist.
+
+## E-021: safe.directory als Variable der Stage statt in der gitconfig des Agenten
+
+- **Alternativen:** `git config --global --add safe.directory ...` einmalig als
+  Jenkins-Benutzer ausführen; das Deployment-Verzeichnis dem Jenkins-Benutzer
+  übereignen
+- **Entscheidung:** `GIT_CONFIG_COUNT` und `GIT_CONFIG_KEY_0` im
+  `environment`-Block der beiden Stages, die im Deployment-Verzeichnis mit git
+  arbeiten
+- **Begründung:** git verweigert seit 2.35 jede Operation in einem Verzeichnis,
+  das jemand anderem gehört. Der Eintrag in der globalen gitconfig läge in
+  `/var/lib/jenkins` -- unversioniert, unsichtbar im Review, und nach einer
+  Neuinstallation des Agenten wieder weg. Als Variable steht die Ausnahme im
+  Jenkinsfile, gilt genau in den zwei Stages, die sie brauchen, und hinterlässt
+  auf der Maschine nichts. Das Verzeichnis zu übereignen scheidet aus: es gehört
+  dem Menschen, der die Maschine betreibt, und nicht der Pipeline.
+
+## E-022: Eigener Staging-Stack je Branch statt eines gemeinsamen
+
+- **Alternativen:** Builds über das Lockable-Resources-Plugin serialisieren,
+  einen gemeinsamen Stack behalten und auf gleichzeitige Builds verzichten
+- **Entscheidung:** Compose-Projektname je Branch, Host-Port vom Docker-Daemon
+  vergeben, Netzname von Compose abgeleitet
+- **Begründung:** `disableConcurrentBuilds` gilt nur je Job. Zwei Branches bauen
+  sehr wohl gleichzeitig, und dann räumt der eine Build dem anderen die
+  Container weg -- beobachtet als `dependency failed to start: container
+  healthgate-staging-db-1 exited (0)`, während ein zweiter Build gerade `down`
+  lief. Ein Lock wäre der direktere Weg, braucht aber ein Plugin, das nicht
+  installiert ist, und serialisiert Builds, die sich gar nicht stören müssten.
+  Der Preis ist ein Datenvolumen je Branch; es bleibt klein und wird beim
+  Aufräumen des Branches mit entfernt.

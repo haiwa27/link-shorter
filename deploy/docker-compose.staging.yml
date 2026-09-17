@@ -1,5 +1,10 @@
 name: healthgate-staging
 
+# Der Projektname ist nur die Vorgabe für den Handbetrieb. Die Pipeline setzt
+# ihn je Branch über -p, damit zwei gleichzeitig laufende Builds sich nicht
+# gegenseitig den Stack abräumen. Aus demselben Grund trägt das Netz hier
+# keinen festen Namen: Compose leitet ihn vom Projektnamen ab.
+
 services:
   app:
     # Dasselbe Image, das anschliessend nach Produktion geht. Staging prueft
@@ -12,7 +17,9 @@ services:
       HEALTHGATE_CHAOS_RATE: "0.0"
       HEALTHGATE_DB_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}?sslmode=disable
     ports:
-      - "8081:8080"
+      # STAGING_PORT=0 laesst Docker einen freien Port waehlen. Die Pipeline
+      # nutzt das, damit parallele Builds sich nicht um 8081 streiten.
+      - "${STAGING_PORT:-8081}:8080"
     depends_on:
       db:
         condition: service_healthy
@@ -36,7 +43,3 @@ services:
 
 volumes:
   db-staging:
-
-networks:
-  default:
-    name: healthgate-staging

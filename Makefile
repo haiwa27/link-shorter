@@ -36,7 +36,9 @@ staging-up: image ## Staging starten
 		$(COMPOSE) -f deploy/docker-compose.staging.yml --env-file .env up -d
 
 staging-down:
-	$(COMPOSE) -f deploy/docker-compose.staging.yml down
+	# HEALTHGATE_IMAGE ist beim Abbauen bedeutungslos, die Compose-Datei
+	# verlangt die Variable aber (absichtlich) beim Einlesen.
+	HEALTHGATE_IMAGE=unbenutzt $(COMPOSE) -f deploy/docker-compose.staging.yml down
 
 prod-up: image ## Produktion mit beiden Slots starten
 	@test -f deploy/caddy/active-slot.conf || \
@@ -45,7 +47,7 @@ prod-up: image ## Produktion mit beiden Slots starten
 		$(COMPOSE) -f deploy/docker-compose.prod.yml --env-file .env up -d
 
 prod-down:
-	$(COMPOSE) -f deploy/docker-compose.prod.yml down
+	HEALTHGATE_IMAGE=unbenutzt $(COMPOSE) -f deploy/docker-compose.prod.yml down
 
 monitoring-up: ## Prometheus und Grafana starten (Produktion muss laufen)
 	$(COMPOSE) -f monitoring/docker-compose.monitoring.yml --env-file .env up -d
