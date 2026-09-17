@@ -155,3 +155,18 @@ Jede Entscheidung, die im Vortrag eine Frage auslösen könnte, gehört hierher.
   Jenkinsfile, gilt genau in den zwei Stages, die sie brauchen, und hinterlässt
   auf der Maschine nichts. Das Verzeichnis zu übereignen scheidet aus: es gehört
   dem Menschen, der die Maschine betreibt, und nicht der Pipeline.
+
+## E-022: Eigener Staging-Stack je Branch statt eines gemeinsamen
+
+- **Alternativen:** Builds über das Lockable-Resources-Plugin serialisieren,
+  einen gemeinsamen Stack behalten und auf gleichzeitige Builds verzichten
+- **Entscheidung:** Compose-Projektname je Branch, Host-Port vom Docker-Daemon
+  vergeben, Netzname von Compose abgeleitet
+- **Begründung:** `disableConcurrentBuilds` gilt nur je Job. Zwei Branches bauen
+  sehr wohl gleichzeitig, und dann räumt der eine Build dem anderen die
+  Container weg -- beobachtet als `dependency failed to start: container
+  healthgate-staging-db-1 exited (0)`, während ein zweiter Build gerade `down`
+  lief. Ein Lock wäre der direktere Weg, braucht aber ein Plugin, das nicht
+  installiert ist, und serialisiert Builds, die sich gar nicht stören müssten.
+  Der Preis ist ein Datenvolumen je Branch; es bleibt klein und wird beim
+  Aufräumen des Branches mit entfernt.
