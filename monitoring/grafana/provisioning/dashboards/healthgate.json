@@ -1,0 +1,231 @@
+{
+  "uid": "healthgate-blue-green",
+  "title": "healthgate: Blue/Green und Health-Gate",
+  "description": "Zeigt dieselbe Fehlerrate, ueber die observe.sh entscheidet, und macht das Umschalten zwischen den Slots sichtbar.",
+  "tags": ["healthgate", "blue-green"],
+  "timezone": "browser",
+  "editable": true,
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "annotations": {
+    "list": [
+      {
+        "name": "Deployment",
+        "enable": true,
+        "iconColor": "purple",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "expr": "resets(healthgate_uptime_seconds[2m]) > 0",
+        "titleFormat": "Deployment",
+        "textFormat": "Slot {{slot}} wurde neu gestartet",
+        "tagKeys": "slot",
+        "step": "30s"
+      },
+      {
+        "name": "Umschalten",
+        "enable": true,
+        "iconColor": "blue",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "expr": "(sum by (slot) (rate(healthgate_http_requests_total[1m])) > 0) unless (sum by (slot) (rate(healthgate_http_requests_total[1m] offset 3m)) > 0)",
+        "titleFormat": "Umschalten",
+        "textFormat": "Slot {{slot}} bekommt Verkehr",
+        "tagKeys": "slot",
+        "step": "30s"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Fehlerrate je Slot",
+      "description": "Anteil der 5xx an allen Anfragen -- der Wert, ueber den observe.sh Freigabe oder Rollback entscheidet. Der or-Zweig setzt die Rate auf null, solange ein Slot noch keine einzige Fehlerantwort geliefert hat: sonst zeigte die Grafik im Normalfall 'keine Daten' statt einer ruhigen Nulllinie.",
+      "gridPos": { "h": 9, "w": 16, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "(sum by (slot) (rate(healthgate_http_requests_total{status=~\"5..\"}[1m])) or sum by (slot) (rate(healthgate_http_requests_total[1m])) * 0) / clamp_min(sum by (slot) (rate(healthgate_http_requests_total[1m])), 0.001)",
+          "legendFormat": "{{slot}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0.05 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Slot mit Nutzerverkehr",
+      "description": "Health-Checks sind ausgenommen: Docker prueft beide Slots, Caddy nur den aktiven. Ohne diese Einschraenkung stuende hier eine Zahl, die aus Pruefanfragen besteht und wie Nutzerverkehr aussieht.",
+      "gridPos": { "h": 9, "w": 8, "x": 16, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "topk(1, sum by (slot) (rate(healthgate_http_requests_total{route!~\"/healthz|/metrics\"}[2m])))",
+          "legendFormat": "{{slot}}",
+          "instant": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 2,
+          "noValue": "kein Nutzerverkehr",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "blue", "value": null }]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Anfragen je Sekunde je Slot",
+      "description": "Hier bewusst einschliesslich der Health-Checks: Caddy prueft nur den Slot, der Verkehr bekommt. Dadurch ist das Umschalten auch ohne Last als Uebergang zu sehen.",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (slot) (rate(healthgate_http_requests_total[1m]))",
+          "legendFormat": "{{slot}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 20, "stacking": { "mode": "none" } }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Mittlere Antwortzeit je Route",
+      "description": "Summe geteilt durch Anzahl. Kein Quantil: das eigene Metrikpaket fuehrt bewusst keine Histogramme (Entscheidung E-004).",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 9 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (route) (rate(healthgate_http_request_duration_seconds_sum[5m])) / clamp_min(sum by (route) (rate(healthgate_http_request_duration_seconds_count[5m])), 0.001)",
+          "legendFormat": "{{route}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 0 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Ausgelieferte Version je Slot",
+      "description": "Beantwortet die Frage, die im Vortrag als erste kommt: was laeuft gerade wo.",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 18 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "healthgate_build_info",
+          "instant": true,
+          "format": "table"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": { "Time": true, "Value": true, "__name__": true, "job": true, "umgebung": true },
+            "renameByName": { "slot": "Slot", "version": "Version", "instance": "Instanz" }
+          }
+        }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": { "showHeader": true }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Laufzeit je Slot",
+      "description": "Faellt der Wert auf null, wurde der Slot neu gestartet. Die Deployment-Marker oben werten genau diesen Sprung aus.",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 18 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "healthgate_uptime_seconds",
+          "legendFormat": "{{slot}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 0 }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      }
+    }
+  ]
+}

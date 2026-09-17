@@ -222,6 +222,36 @@ Jede Entscheidung, die im Vortrag eine Frage auslösen könnte, gehört hierher.
   Der Container trägt den Build im Namen, damit gleichzeitige Jobs sich nicht
   gegenseitig abräumen.
 
+## E-019: Dashboard als Provisioning-Datei statt in der Oberfläche geklickt
+
+- **Alternativen:** Dashboard in Grafana anlegen und exportieren, wenn jemand
+  danach fragt
+- **Entscheidung:** `monitoring/grafana/provisioning/dashboards/healthgate.json`
+  im Repository, Grafana lädt es beim Start
+- **Begründung:** Ein geklicktes Dashboard lebt im Grafana-Volume. Es ist damit
+  nicht reviewbar, nicht reproduzierbar und beim nächsten frischen Aufsetzen
+  weg. Als Datei im Repository ist es dieselbe Art von Artefakt wie die
+  Alarmregeln. Die Datenquelle bekommt dafür eine feste `uid`: ohne sie vergibt
+  Grafana bei jeder Neuinstallation eine andere, und das Dashboard zeigte auf
+  eine Datenquelle, die es nicht gibt.
+
+## E-020: Deployment-Marker aus den Metriken statt über die Grafana-API
+
+- **Alternativen:** Die Pipeline schreibt nach dem Umschalten eine Annotation
+  über die HTTP-API von Grafana
+- **Entscheidung:** zwei Annotationen im Dashboard, beide als PromQL-Abfrage --
+  `resets(healthgate_uptime_seconds[2m])` markiert den Neustart eines Slots,
+  ein `unless`-Ausdruck über der Anfragerate markiert den Moment, in dem ein
+  Slot Verkehr bekommt
+- **Begründung:** Der API-Weg bräuchte ein Grafana-Token in den
+  Jenkins-Credentials. Das ist Konfiguration in der Oberfläche und damit genau
+  der nicht versionierte Zustand, den dieses Projekt vermeidet; ausserdem wäre
+  der Marker gesetzt, auch wenn das Deployment danach zurückgerollt wird. Aus
+  den Metriken abgeleitet zeigt der Marker, was tatsächlich passiert ist, und
+  nicht, was die Pipeline gemeldet hat. Die Health-Checks helfen dabei: Caddy
+  prüft nur den Slot, der Verkehr bekommt, deshalb ist das Umschalten auch ohne
+  Nutzerlast sichtbar.
+
 ## E-021: safe.directory als Variable der Stage statt in der gitconfig des Agenten
 
 - **Alternativen:** `git config --global --add safe.directory ...` einmalig als
