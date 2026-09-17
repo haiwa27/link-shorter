@@ -1,38 +1,44 @@
 # Übergabe
 
 Stand: 17.09.2026. Vier Stories umgesetzt, jede als eigener Branch mit eigenem
-Pull Request. **Nichts davon ist gemerged** -- die Freigabe liegt bei euch.
+Pull Request. **#10 ist gemerged**, die übrigen warten auf euer Review -- die
+Freigabe liegt bei euch.
 
 Produktion lief während der gesamten Arbeit durch: Slot grün, Version `fdbce28`,
 `curl localhost/healthz` nach jedem Eingriff geprüft. An `/etc/healthgate/.env`,
 `/home/admin/healthgate/.env`, an Volumes und an der Cloudflare-Konfiguration
 wurde nichts geändert.
 
-## Offene Pull Requests
+## Pull Requests
 
-| PR | Story | Inhalt | Pipeline |
+| PR | Story | Inhalt | Stand |
 |---|---|---|---|
-| [#9](https://github.com/haiwa27/healthgate/pull/9) | P-01 | PostgreSQL als Speicher hinter `store.Speicher` | rot, siehe unten |
-| [#10](https://github.com/haiwa27/healthgate/pull/10) | C-02, C-04 | Pipeline bis einschliesslich E2E grün, Deploy gegen `/home/admin/healthgate` | **grün** (PR-10, Build 2) |
-| [#11](https://github.com/haiwa27/healthgate/pull/11) | Q-03, Q-06 | Coverage-Schwelle 65 Prozent, Testdatenbank, JUnit-Berichte | rot, siehe unten |
-| [#12](https://github.com/haiwa27/healthgate/pull/12) | O-04, O-05 | Grafana-Dashboard als Provisioning-Datei, Deployment-Marker | rot, siehe unten |
+| [#9](https://github.com/haiwa27/healthgate/pull/9) | P-01 | PostgreSQL als Speicher hinter `store.Speicher` | offen |
+| [#10](https://github.com/haiwa27/healthgate/pull/10) | C-02, C-04 | Pipeline bis einschliesslich E2E grün, Deploy gegen `/home/admin/healthgate` | **gemerged** (PR-10, Build 2 grün) |
+| [#11](https://github.com/haiwa27/healthgate/pull/11) | Q-03, Q-06 | Coverage-Schwelle 65 Prozent, Testdatenbank, JUnit-Berichte | offen |
+| [#12](https://github.com/haiwa27/healthgate/pull/12) | O-04, O-05 | Grafana-Dashboard als Provisioning-Datei, Deployment-Marker | offen |
+| [#13](https://github.com/haiwa27/healthgate/pull/13) | D-01 | diese Datei | offen |
 
-**Warum #9, #11 und #12 rot sind:** alle drei zweigen von `main` ab und
-enthalten den Fehler, den erst #10 behebt -- die Pipeline sucht die `.env` im
-Jenkins-Workspace, wo sie nicht liegt. Der eigene Inhalt dieser drei PRs läuft
-in ihren Builds bis zu dieser Stelle durch; bei #11 etwa steht im Protokoll
-`Coverage: 70.3% (Mindestwert 65%)` und der JUnit-Bericht wird aufgezeichnet.
+In alle vier offenen Branches ist `main` nach dem Merge von #10 hineingezogen
+worden, die Konflikte sind aufgelöst. Sie lassen sich in beliebiger Reihenfolge
+mergen; sinnvoll ist **#9, #11, #12, #13**, weil #11 die Coverage-Schwelle auf
+einen Wert setzt, den erst die Tests aus #9 vollständig tragen.
 
-### Empfohlene Reihenfolge beim Mergen
+Konfliktfrei ist dabei nicht dasselbe wie geprüft: die Pipeline läuft je Branch
+gegen den zusammengeführten Stand. Was die Builds der vier PRs sagen, ist vor
+dem Mergen der jeweils letzte Nachweis.
 
-1. **#10** zuerst. Danach ist `main` bis einschliesslich der E2E-Tests grün und
-   alle weiteren Builds scheitern nicht mehr an der `.env`.
-2. **#9**, dann **#11**, dann **#12**.
+### Wie die Konflikte aufgelöst wurden
 
-#11 und #12 fassen den `Jenkinsfile`-Bereich an, den #10 ebenfalls anfasst.
-Beim Mergen in dieser Reihenfolge kann es im `post`-Block der Stage
-*E2E-Tests gegen Staging* zu einem kleinen Konflikt kommen: #10 ergänzt dort das
-Aufräumen von Staging, #11 die Zeile `junit`. Beide Zeilen gehören hinein.
+- `docs/entscheidungen.md`: beide Seiten behalten, Einträge in der Reihenfolge
+  E-012 bis E-020 sortiert. Jeder Branch hatte seine Entscheidungen ans Dateiende
+  angehängt, während `main` dort inzwischen andere stehen hatte.
+- `Jenkinsfile` (#11): der `environment`-Block enthält jetzt beides -- die
+  Grenzwerte des Health-Gates aus #10 und `COVERAGE_SCHWELLE`,
+  `JUNIT_REPORT_VERSION` und `TEST_DB` aus #11.
+- `README.md` (#11): die Stage-Tabelle aus #10 mit der Spalte *Arbeitet in*
+  bleibt; die Zeile *Unit-Tests* trägt die Beschreibung aus #11.
+- `.gitignore` (#11): beide Blöcke, Testberichte und aktiver Slot.
 
 ## Was erledigt ist
 
@@ -186,9 +192,9 @@ Alle in `docs/entscheidungen.md` mit Alternativen und Begründung:
 
 ## Was als Nächstes zu tun ist
 
-1. **PRs prüfen und in der oben genannten Reihenfolge mergen.** Jeder PR gehört
-   der jeweils anderen Person zum Review -- die vier hier stammen alle aus
-   derselben Sitzung und haben noch niemanden gesehen.
+1. **Die vier offenen PRs prüfen und mergen.** Jeder PR gehört der jeweils
+   anderen Person zum Review -- sie stammen alle aus derselben Sitzung und haben
+   noch niemanden gesehen.
 2. **Die Gruppenzugehörigkeit von `jenkins` einrichten** (Befehl oben) und einen
    Build auf `main` auslösen. Danach hält die Pipeline bei *Freigabe für
    Produktion* an; die Freigabe gibt eine Person, nicht die Pipeline.
