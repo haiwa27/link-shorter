@@ -273,6 +273,7 @@ Standardwerten. `.env.example` enthält neutrale Platzhalter; `.env` ist in
 | `KONF_DATEI` | nein | Pfad zu `active-slot.conf`, überschreibt die Vorgabe |
 | `ZUSTAND_VERZEICHNIS` | nein | Pfad zu `deploy/state` |
 | `BASIS_URL` | nein | Basis-URL für Playwright und `rollback.sh` |
+| `STAGING_PORT` | nein | Host-Port von Staging, Vorgabe `8081`; `0` vergibt einen freien Port |
 | `WAIT_PAUSE` | nein | Sekunden zwischen Health-Abfragen, Vorgabe `2` |
 
 ### Health-Gate und Monitoring
@@ -392,7 +393,7 @@ Auslieferung genauso reviewt wird wie eine Änderung am Code.
 | Unit-Tests | Tests plus Coverage-Schwelle; Bericht als Artefakt | Workspace |
 | Image bauen | ein Image mit SHA-Tag, lokal und für die Registry | Workspace |
 | Image veröffentlichen | Push in die Registry (offen, Story C-05) | Workspace |
-| Staging ausliefern | Staging mit genau diesem Image, auf Bereitschaft warten | Workspace |
+| Staging ausliefern | Staging mit genau diesem Image in einem Stack je Branch, auf Bereitschaft warten | Workspace |
 | E2E-Tests gegen Staging | Playwright; Bericht und Spuren als Artefakt | Workspace |
 | Deployment-Verzeichnis prüfen | Schreibrecht und Stand des Deployments, nur auf `main` | Deployment |
 | Freigabe für Produktion | bewusste menschliche Entscheidung, nur auf `main` | — |

@@ -38,8 +38,14 @@ pipeline {
 		// neu ausgecheckt und darf keine Geheimnisse enthalten (E-014).
 		ENV_DATEI    = '/etc/healthgate/.env'
 
-		STAGING_URL  = 'http://localhost:8081'
 		PROD_URL     = 'http://localhost'
+		// Eigener Staging-Stack je Branch. disableConcurrentBuilds gilt nur je
+		// Job; zwei Branches bauen sehr wohl gleichzeitig, und ein gemeinsamer
+		// Stack heisst dann, dass der eine Build dem anderen die Container unter
+		// den Füssen wegräumt (Entscheidung E-022). Die Adresse steht hier
+		// bewusst nicht: der Port wird beim Start vergeben.
+		STAGING_PROJEKT = "healthgate-staging-${(env.JOB_BASE_NAME ?: 'lokal').toLowerCase().replaceAll('[^a-z0-9_.-]', '-')}"
+		STAGING_COMPOSE = 'deploy/docker-compose.staging.yml'
 
 		// Grenzwerte des Health-Gates. Sie stehen hier und nicht in der .env,
 		// weil sie zur Pipeline gehören und versioniert sein müssen (Story R-04).
@@ -132,10 +138,22 @@ pipeline {
 				// Staging läuft im Workspace: es ist eine Testumgebung und hält
 				// keinen Zustand, den ein frischer Checkout verlieren könnte.
 				sh '''
-					HEALTHGATE_VERSION=${SHA} docker compose \
-						-f deploy/docker-compose.staging.yml \
+					STAGING_PORT=0 HEALTHGATE_VERSION=${SHA} docker compose \
+						-p "${STAGING_PROJEKT}" -f "${STAGING_COMPOSE}" \
 						--env-file "${ENV_DATEI}" up -d
 				'''
+				script {
+					// Der Port wird beim Start vergeben, also hier erfragt und
+					// nicht im Jenkinsfile festgeschrieben.
+					env.STAGING_URL = sh(
+						script: '''
+							PORT=$(docker compose -p "${STAGING_PROJEKT}" -f "${STAGING_COMPOSE}" \
+								--env-file "${ENV_DATEI}" port app 8080 | sed 's/.*://')
+							echo "http://localhost:${PORT}"
+						''',
+						returnStdout: true).trim()
+					echo "Staging erreichbar unter ${env.STAGING_URL}"
+				}
 				sh 'deploy/scripts/wait-healthy.sh ${STAGING_URL} 3 30'
 			}
 		}
@@ -161,7 +179,12 @@ pipeline {
 				always {
 					archiveArtifacts artifacts: 'tests/e2e/playwright-report/**, tests/e2e/test-results/**',
 						allowEmptyArchive: true
-					sh 'docker compose -f deploy/docker-compose.staging.yml down || true'
+					// Ohne -v: das Datenvolumen bleibt, damit die Migration nicht
+					// bei jedem Lauf neu durchlaufen muss.
+					sh '''
+						STAGING_PORT=0 docker compose -p "${STAGING_PROJEKT}" \
+							-f "${STAGING_COMPOSE}" --env-file "${ENV_DATEI}" down || true
+					'''
 				}
 			}
 		}
