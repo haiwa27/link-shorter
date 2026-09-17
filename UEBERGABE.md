@@ -1,0 +1,210 @@
+# Übergabe
+
+Stand: 17.09.2026. Vier Stories umgesetzt, jede als eigener Branch mit eigenem
+Pull Request. **Nichts davon ist gemerged** -- die Freigabe liegt bei euch.
+
+Produktion lief während der gesamten Arbeit durch: Slot grün, Version `fdbce28`,
+`curl localhost/healthz` nach jedem Eingriff geprüft. An `/etc/healthgate/.env`,
+`/home/admin/healthgate/.env`, an Volumes und an der Cloudflare-Konfiguration
+wurde nichts geändert.
+
+## Offene Pull Requests
+
+| PR | Story | Inhalt | Pipeline |
+|---|---|---|---|
+| [#9](https://github.com/haiwa27/healthgate/pull/9) | P-01 | PostgreSQL als Speicher hinter `store.Speicher` | rot, siehe unten |
+| [#10](https://github.com/haiwa27/healthgate/pull/10) | C-02, C-04 | Pipeline bis einschliesslich E2E grün, Deploy gegen `/home/admin/healthgate` | **grün** (PR-10, Build 2) |
+| [#11](https://github.com/haiwa27/healthgate/pull/11) | Q-03, Q-06 | Coverage-Schwelle 65 Prozent, Testdatenbank, JUnit-Berichte | rot, siehe unten |
+| [#12](https://github.com/haiwa27/healthgate/pull/12) | O-04, O-05 | Grafana-Dashboard als Provisioning-Datei, Deployment-Marker | rot, siehe unten |
+
+**Warum #9, #11 und #12 rot sind:** alle drei zweigen von `main` ab und
+enthalten den Fehler, den erst #10 behebt -- die Pipeline sucht die `.env` im
+Jenkins-Workspace, wo sie nicht liegt. Der eigene Inhalt dieser drei PRs läuft
+in ihren Builds bis zu dieser Stelle durch; bei #11 etwa steht im Protokoll
+`Coverage: 70.3% (Mindestwert 65%)` und der JUnit-Bericht wird aufgezeichnet.
+
+### Empfohlene Reihenfolge beim Mergen
+
+1. **#10** zuerst. Danach ist `main` bis einschliesslich der E2E-Tests grün und
+   alle weiteren Builds scheitern nicht mehr an der `.env`.
+2. **#9**, dann **#11**, dann **#12**.
+
+#11 und #12 fassen den `Jenkinsfile`-Bereich an, den #10 ebenfalls anfasst.
+Beim Mergen in dieser Reihenfolge kann es im `post`-Block der Stage
+*E2E-Tests gegen Staging* zu einem kleinen Konflikt kommen: #10 ergänzt dort das
+Aufräumen von Staging, #11 die Zeile `junit`. Beide Zeilen gehören hinein.
+
+## Was erledigt ist
+
+### P-01: PostgreSQL als Speicher (PR #9)
+
+`store.Speicher` hat eine zweite Implementierung auf Basis von `pgx/v5`. Die
+Schnittstelle ist unverändert, Handler und bestehende Tests sind nicht angefasst.
+`Pruefen` macht einen echten Ping; ein Slot ohne Datenbank meldet damit 503 statt
+sich als bereit auszugeben. Der Aufrufzähler wird in der Datenbank erhöht, sonst
+hinge die Zahl daran, welcher Slot die Weiterleitung bedient hat. In `prod`
+erzwingt `config.Laden` jetzt `HEALTHGATE_DB_URL`.
+
+15 Tests ergänzt. Die Tests gegen eine echte Datenbank laufen, wenn
+`HEALTHGATE_TEST_DB_URL` gesetzt ist, und überspringen sich sonst. Sie wurden
+gegen PostgreSQL 16 auf der Maschine ausgeführt: alle grün, Coverage des Pakets
+`store` 92,1 Prozent.
+
+### C-02 und C-04: Pipeline (PR #10)
+
+Die Pipeline läuft von oben bis einschliesslich der E2E-Tests durch. Nachweis:
+`healthgate/PR-10`, Build 2, SUCCESS, vier Playwright-Tests grün.
+
+Behoben bzw. geändert:
+
+- `.env` wird aus `/etc/healthgate/.env` gelesen statt aus dem Workspace.
+- Alle Deploy-Stages arbeiten gegen `/home/admin/healthgate`. Die Regel steht im
+  Kopf des `Jenkinsfile` und als Entscheidung E-012.
+- Das Image wird einmal gebaut; Staging und beide Produktionsslots ziehen genau
+  dieses Artefakt über `HEALTHGATE_IMAGE` (E-013). Vorher baute Produktion neu
+  und lieferte damit etwas anderes aus als das, was getestet wurde.
+- `deploy/caddy/active-slot.conf` ist nicht mehr versioniert. Im Repository liegt
+  `active-slot.conf.vorlage`; `switch-slot.sh` legt die Datei beim ersten Lauf an
+  (E-015). Versioniert setzte jeder Checkout im Deployment-Verzeichnis den
+  aktiven Slot still zurück.
+- Caddy mountet das Verzeichnis `deploy/caddy` statt der Einzeldateien. Ein
+  Mount auf eine Einzeldatei hängt an deren Inode; wird die Datei ersetzt statt
+  überschrieben, sieht der Container weiter den alten Inhalt.
+- `wait-healthy.sh` kann jetzt auch `container:<name>` prüfen. Die
+  Produktionsslots veröffentlichen keinen Port auf dem Host, die bisherige
+  Prüfung vor dem Umschalten konnte deshalb nie funktionieren.
+- Playwright läuft im mitgelieferten Container: die Maschine hat Node 18,
+  Playwright verlangt Node 20 (E-016).
+
+### Q-03 und Q-06: Coverage und Testberichte (PR #11)
+
+Die Schwelle steht bei 65 Prozent statt 40. 40 lag unter dem tatsächlichen Stand
+und hätte einen Einbruch nie gemeldet. Gemessen mit laufender Testdatenbank
+liegt der Stand bei 72,4 Prozent, wenn #9 und #11 beide gemerged sind.
+
+Die Stage startet vor den Tests einen PostgreSQL-Container und räumt ihn im
+`post`-Block ab. Ohne ihn überspringen sich die Datenbanktests und die
+Coverage-Zahl wiese eine Prüfung aus, die nicht stattgefunden hat (E-018).
+
+`go-junit-report` und der JUnit-Bericht von Playwright werden über den
+`junit`-Schritt ausgewertet. Nebenbei behoben: `go test ... | tee` lieferte den
+Exitcode von `tee`, fehlgeschlagene Tests hätten den Build nicht rot gemacht.
+
+Tests für den In-Memory-Speicher ergänzt, der bisher ohne jede Prüfung lief.
+
+### O-04 und O-05: Dashboard und Marker (PR #12)
+
+`monitoring/grafana/provisioning/dashboards/healthgate.json` mit sechs Panels,
+darunter die Fehlerrate mit dem Ausdruck, über den `observe.sh` entscheidet, und
+die Anfragerate je Slot, in der das Umschalten als Übergang zu sehen ist.
+
+Zwei Deployment-Marker als Annotation, beide aus den Metriken abgeleitet statt
+über die Grafana-API gesetzt (E-020). Die Datenquelle bekommt eine feste `uid`,
+sonst zeigt das Dashboard nach einer Neuinstallation ins Leere.
+
+Geprüft in einem Wegwerf-Grafana auf Port 3001 gegen den echten Prometheus:
+Dashboard provisioniert, sechs Panels, zwei Annotationen, alle Abfragen liefern
+Daten. Der Testcontainer ist wieder entfernt, das laufende Grafana wurde nicht
+angefasst.
+
+## Was nicht funktioniert hat
+
+### Die Deploy-Stages sind ungeprüft -- eine Berechtigung fehlt
+
+Der Jenkins-Benutzer kommt nicht an `/home/admin/healthgate`:
+
+    $ ls -ld /home/admin
+    drwxr-x--- 10 admin admin ... /home/admin
+    $ id jenkins
+    uid=109(jenkins) gid=112(jenkins) groups=112(jenkins),988(docker)
+
+`jenkins` ist weder in der Gruppe `admin` noch kann er das Verzeichnis
+durchqueren. Damit können die Stages ab *Deployment-Verzeichnis prüfen* nicht
+laufen -- sie sind geschrieben, aber nicht in einem echten Build erprobt.
+
+Der nötige Eingriff ist eine Änderung an der Gruppenzugehörigkeit eines
+Systembenutzers. Die war mir in dieser Sitzung nicht erlaubt; sie gehört auch
+zu den Dingen, die jemand bewusst entscheiden sollte:
+
+    sudo usermod -aG admin jenkins
+    sudo systemctl restart jenkins
+
+Der Neustart ist nötig, weil ein laufender Dienst seine Gruppen nicht neu
+einliest. Danach ist `/home/admin/healthgate` über die Gruppe beschreibbar --
+ohne `sudo`-Rechte für Jenkins. `/home/admin/healthgate/.env` bleibt mit Rechten
+600 für `admin` unlesbar; die Pipeline benutzt ohnehin `/etc/healthgate/.env`.
+
+Die Stage *Deployment-Verzeichnis prüfen* bricht mit genau diesem Hinweis ab,
+wenn das Recht fehlt -- und zwar vor der Freigabe, nicht mitten im Umschalten.
+
+**Was stattdessen geprüft wurde**, damit der ungeprüfte Teil so klein wie
+möglich bleibt:
+
+| Bestandteil | Nachweis |
+|---|---|
+| Beide Compose-Dateien | `docker compose config` mit der echten `.env`, fehlerfrei |
+| Alle Deploy-Skripte | `bash -n`, Syntax fehlerfrei |
+| `wait-healthy.sh container:<name>` | gegen den laufenden Slot grün, gegen einen nicht vorhandenen rot |
+| Bootstrap von `active-slot.conf` | in einem Testverzeichnis angelegt und wieder eingelesen |
+| Caddy mit Verzeichnis-Mount | eigener Testcontainer: Konfiguration geladen, Weiterleitung auf grün |
+| Der Inode-Fall aus E-015 | Datei im Testverzeichnis per `mv` ersetzt, `caddy reload`, Container schaltet auf blau -- der Verzeichnis-Mount sieht die Ersetzung, der Datei-Mount hätte sie nicht gesehen |
+
+Der Testcontainer war nicht am Port 80 und hatte keinen Einfluss auf Produktion;
+Produktion lief die ganze Zeit auf grün.
+
+### Weiter offen, bewusst nicht angefasst
+
+- **C-05, C-08:** eigene Registry und Push. Solange Jenkins und Produktion auf
+  derselben Maschine liegen, reicht der lokale Docker-Daemon. Der Push braucht
+  Zugangsdaten, die es noch nicht gibt.
+- **Migrationswerkzeug:** `0001_init.sql` wird über
+  `docker-entrypoint-initdb.d` angewendet. Das läuft nur bei leerem Volume; eine
+  spätere Migration 0002 käme auf einer bestehenden Datenbank nicht an. Bekannt
+  und in E-010 begründet, mit dem Auslöser: sobald die zweite Migration ansteht,
+  kommt golang-migrate als eigene Stage vor dem Umschalten.
+- **O-06:** Alertmanager mit echter Benachrichtigung.
+
+## Entscheidungen dieser Sitzung
+
+Alle in `docs/entscheidungen.md` mit Alternativen und Begründung:
+
+| ID | Kurz |
+|---|---|
+| E-008 | pgx statt `database/sql` |
+| E-009 | Verbindungspool ohne Verbindungsaufbau beim Start |
+| E-010 | Schema über die Migration beim Datenbankstart, kein Migrationswerkzeug |
+| E-011 | Datenbanktests gegen eine echte Wegwerf-Instanz statt gegen Attrappen |
+| E-012 | Bauen im Workspace, Ausliefern gegen das Deployment-Verzeichnis |
+| E-013 | Ein Image bauen und dasselbe ausliefern |
+| E-014 | `.env` ausserhalb des Workspace unter `/etc/healthgate` |
+| E-015 | Der aktive Slot ist Laufzeitzustand und wird nicht versioniert |
+| E-016 | Playwright im mitgelieferten Container |
+| E-017 | Coverage-Schwelle bei 65 Prozent |
+| E-018 | Testdatenbank in der Pipeline |
+| E-019 | Dashboard als Provisioning-Datei |
+| E-020 | Deployment-Marker aus den Metriken statt über die Grafana-API |
+
+## Was als Nächstes zu tun ist
+
+1. **PRs prüfen und in der oben genannten Reihenfolge mergen.** Jeder PR gehört
+   der jeweils anderen Person zum Review -- die vier hier stammen alle aus
+   derselben Sitzung und haben noch niemanden gesehen.
+2. **Die Gruppenzugehörigkeit von `jenkins` einrichten** (Befehl oben) und einen
+   Build auf `main` auslösen. Danach hält die Pipeline bei *Freigabe für
+   Produktion* an; die Freigabe gibt eine Person, nicht die Pipeline.
+3. **Den ersten vollständigen Durchlauf begleiten.** Beim ersten Deployment nach
+   dem Merge von #10 wird der Caddy-Container einmal neu erzeugt, weil sich sein
+   Mount ändert. Das dauert Sekunden, ist aber der einzige Moment, in dem der
+   Proxy kurz weg ist. Danach läuft der Wechsel wieder ohne Unterbrechung.
+4. **Nach dem Merge von #12 das Monitoring neu laden**, damit Grafana das
+   Dashboard einliest:
+
+       docker compose -f monitoring/docker-compose.monitoring.yml --env-file .env up -d grafana
+
+5. **Den Rollback vorführen und dabei Last erzeugen.** Ohne Verkehr ist das
+   Beobachtungsfenster aussagelos, `observe.sh` sagt das auch:
+
+       deploy/scripts/last-erzeugen.sh http://localhost 5
+
+   Für den Fehlerfall den Chaos-Wert des Zielslots setzen, etwa
+   `CHAOS_GREEN=0.3`, und den Build laufen lassen.
