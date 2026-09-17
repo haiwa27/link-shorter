@@ -139,3 +139,34 @@ Jede Entscheidung, die im Vortrag eine Frage auslösen könnte, gehört hierher.
   `--with-deps` bräuchte ausserdem root für apt. Der Container bringt Browser
   und Systempakete in der Version mit, die zum Lockfile passt; die Pipeline
   bleibt damit unabhängig davon, was auf dem Agenten installiert ist.
+
+## E-021: safe.directory als Variable der Stage statt in der gitconfig des Agenten
+
+- **Alternativen:** `git config --global --add safe.directory ...` einmalig als
+  Jenkins-Benutzer ausführen; das Deployment-Verzeichnis dem Jenkins-Benutzer
+  übereignen
+- **Entscheidung:** `GIT_CONFIG_COUNT` und `GIT_CONFIG_KEY_0` im
+  `environment`-Block der beiden Stages, die im Deployment-Verzeichnis mit git
+  arbeiten
+- **Begründung:** git verweigert seit 2.35 jede Operation in einem Verzeichnis,
+  das jemand anderem gehört. Der Eintrag in der globalen gitconfig läge in
+  `/var/lib/jenkins` -- unversioniert, unsichtbar im Review, und nach einer
+  Neuinstallation des Agenten wieder weg. Als Variable steht die Ausnahme im
+  Jenkinsfile, gilt genau in den zwei Stages, die sie brauchen, und hinterlässt
+  auf der Maschine nichts. Das Verzeichnis zu übereignen scheidet aus: es gehört
+  dem Menschen, der die Maschine betreibt, und nicht der Pipeline.
+
+## E-022: Eigener Staging-Stack je Branch statt eines gemeinsamen
+
+- **Alternativen:** Builds über das Lockable-Resources-Plugin serialisieren,
+  einen gemeinsamen Stack behalten und auf gleichzeitige Builds verzichten
+- **Entscheidung:** Compose-Projektname je Branch, Host-Port vom Docker-Daemon
+  vergeben, Netzname von Compose abgeleitet
+- **Begründung:** `disableConcurrentBuilds` gilt nur je Job. Zwei Branches bauen
+  sehr wohl gleichzeitig, und dann räumt der eine Build dem anderen die
+  Container weg -- beobachtet als `dependency failed to start: container
+  healthgate-staging-db-1 exited (0)`, während ein zweiter Build gerade `down`
+  lief. Ein Lock wäre der direktere Weg, braucht aber ein Plugin, das nicht
+  installiert ist, und serialisiert Builds, die sich gar nicht stören müssten.
+  Der Preis ist ein Datenvolumen je Branch; es bleibt klein und wird beim
+  Aufräumen des Branches mit entfernt.
