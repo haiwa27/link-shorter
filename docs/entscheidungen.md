@@ -192,6 +192,66 @@ Jede Entscheidung, die im Vortrag eine Frage auslösen könnte, gehört hierher.
   und Systempakete in der Version mit, die zum Lockfile passt; die Pipeline
   bleibt damit unabhängig davon, was auf dem Agenten installiert ist.
 
+## E-017: Coverage-Schwelle bei 65 Prozent statt bei 80 oder 40
+
+- **Alternativen:** bei 40 Prozent belassen, auf 80 Prozent anheben, Schwelle je
+  Paket statt insgesamt
+- **Entscheidung:** 65 Prozent über alle Pakete, gemessen mit laufender
+  Testdatenbank
+- **Begründung:** 40 Prozent lag unter dem tatsächlichen Stand und hätte einen
+  Einbruch nie gemeldet -- eine Schwelle, die immer grün ist, prüft nichts.
+  80 Prozent erzwänge Tests für `cmd/server`, wo die Verdrahtung von
+  Konfiguration und Server steht: solche Tests prüfen, dass man die Zeilen
+  nochmal geschrieben hat, und nicht, dass die Anwendung funktioniert. Der
+  gemessene Stand liegt bei rund 72 Prozent; 65 lässt Raum für eine neue
+  Funktion, die kurz unter ihren Tests herläuft, und meldet trotzdem, wenn ein
+  Paket ohne Tests dazukommt. Ein Wert je Paket wäre genauer, verleitet aber
+  dazu, die Schwelle dort zu senken, wo Tests fehlen.
+
+## E-018: Testdatenbank in der Pipeline statt übersprungener Datenbanktests
+
+- **Alternativen:** die Datenbanktests in der Pipeline überspringen lassen,
+  Testcontainers-Bibliothek, dauerhaft laufende Testdatenbank
+- **Entscheidung:** die Stage startet vor den Tests einen
+  PostgreSQL-Container und räumt ihn im `post`-Block wieder ab
+- **Begründung:** Übersprungene Tests sind schlimmer als fehlende: die
+  Coverage-Zahl weist eine Prüfung aus, die nicht stattgefunden hat. Eine
+  dauerhaft laufende Testdatenbank wäre Zustand, den niemand pflegt und der
+  zwischen Läufen Daten behält. Testcontainers wäre die saubere Lösung, bringt
+  aber eine Abhängigkeit für etwas mit, das hier vier Zeilen `docker run` sind.
+  Der Container trägt den Build im Namen, damit gleichzeitige Jobs sich nicht
+  gegenseitig abräumen.
+
+## E-019: Dashboard als Provisioning-Datei statt in der Oberfläche geklickt
+
+- **Alternativen:** Dashboard in Grafana anlegen und exportieren, wenn jemand
+  danach fragt
+- **Entscheidung:** `monitoring/grafana/provisioning/dashboards/healthgate.json`
+  im Repository, Grafana lädt es beim Start
+- **Begründung:** Ein geklicktes Dashboard lebt im Grafana-Volume. Es ist damit
+  nicht reviewbar, nicht reproduzierbar und beim nächsten frischen Aufsetzen
+  weg. Als Datei im Repository ist es dieselbe Art von Artefakt wie die
+  Alarmregeln. Die Datenquelle bekommt dafür eine feste `uid`: ohne sie vergibt
+  Grafana bei jeder Neuinstallation eine andere, und das Dashboard zeigte auf
+  eine Datenquelle, die es nicht gibt.
+
+## E-020: Deployment-Marker aus den Metriken statt über die Grafana-API
+
+- **Alternativen:** Die Pipeline schreibt nach dem Umschalten eine Annotation
+  über die HTTP-API von Grafana
+- **Entscheidung:** zwei Annotationen im Dashboard, beide als PromQL-Abfrage --
+  `resets(healthgate_uptime_seconds[2m])` markiert den Neustart eines Slots,
+  ein `unless`-Ausdruck über der Anfragerate markiert den Moment, in dem ein
+  Slot Verkehr bekommt
+- **Begründung:** Der API-Weg bräuchte ein Grafana-Token in den
+  Jenkins-Credentials. Das ist Konfiguration in der Oberfläche und damit genau
+  der nicht versionierte Zustand, den dieses Projekt vermeidet; ausserdem wäre
+  der Marker gesetzt, auch wenn das Deployment danach zurückgerollt wird. Aus
+  den Metriken abgeleitet zeigt der Marker, was tatsächlich passiert ist, und
+  nicht, was die Pipeline gemeldet hat. Die Health-Checks helfen dabei: Caddy
+  prüft nur den Slot, der Verkehr bekommt, deshalb ist das Umschalten auch ohne
+  Nutzerlast sichtbar.
+
 ## E-021: safe.directory als Variable der Stage statt in der gitconfig des Agenten
 
 - **Alternativen:** `git config --global --add safe.directory ...` einmalig als
