@@ -56,5 +56,4 @@ Story P-01 vor Story R-01 fertig sein muss.
 - TODO(P-01): PostgreSQL-Implementierung von `store.Speicher`
 - TODO(Q-03): Coverage-Schwelle scharf stellen
 - TODO(C-05): eigene Registry, Push aktivieren
-
 - TODO(O-06): Alertmanager mit echter Benachrichtigung
