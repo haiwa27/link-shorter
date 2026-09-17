@@ -370,6 +370,30 @@ Vor jedem Commit prüfen die Hooks Formatierung, `go vet`, gestagte `.env`-Datei
 und eine lokale Sperrliste. Vor jedem Push laufen die Unit-Tests und ein direkter
 Push auf `main` wird abgelehnt. Siehe `docs/git-konventionen.md`.
 
+### Coverage und Testberichte
+
+Die Pipeline verlangt **mindestens 65 Prozent** Statement-Coverage über alle
+Pakete. Der Wert liegt unter dem aktuellen Stand von rund 72 Prozent: er soll
+einen Einbruch melden, nicht jede Nachkommastelle (Entscheidung E-017).
+
+Die Tests des PostgreSQL-Speichers laufen gegen eine echte Datenbank. Die
+Pipeline startet dafür einen Wegwerf-Container und setzt `HEALTHGATE_TEST_DB_URL`;
+ohne die Variable überspringen sich diese Tests. Lokal:
+
+    docker run -d --name hg-test-db -P \
+      -e POSTGRES_USER=test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=test postgres:16-alpine
+    PORT=$(docker port hg-test-db 5432/tcp | head -1 | sed 's/.*://')
+    cd app && HEALTHGATE_TEST_DB_URL="postgres://test:test@127.0.0.1:$PORT/test?sslmode=disable" \
+      go test ./... -cover
+
+**Merksatz:** Übersprungene Tests sind schlimmer als fehlende. Ohne Datenbank
+weist die Coverage-Zahl eine Prüfung aus, die nicht stattgefunden hat — deshalb
+gehört die Testdatenbank in die Pipeline (Entscheidung E-018).
+
+`go-junit-report` wandelt die Ausgabe von `go test` in einen JUnit-Bericht; die
+Playwright-Suite schreibt ihren eigenen. Jenkins zeigt beides als Tabelle mit
+Verlauf statt als Textwand im Konsolenprotokoll.
+
 ### Worauf die Tests besonders achten
 
 **`/healthz` bleibt auch bei Chaos-Rate `1.0` grün.** Wäre der Health-Check
@@ -416,7 +440,7 @@ Auslieferung genauso reviewt wird wie eine Änderung am Code.
 |---|---|---|
 | Vorbereitung | Werkzeuge vorhanden, `.env` lesbar, Build-Name auf Git-SHA setzen | Workspace |
 | Statische Analyse | `go vet`; unformatierter Code bricht ab | Workspace |
-| Unit-Tests | Tests plus Coverage-Schwelle; Bericht als Artefakt | Workspace |
+| Unit-Tests | Tests gegen eine Wegwerf-Datenbank, Coverage-Schwelle, JUnit-Bericht | Workspace |
 | Image bauen | ein Image mit SHA-Tag, lokal und für die Registry | Workspace |
 | Image veröffentlichen | Push in die Registry (offen, Story C-05) | Workspace |
 | Staging ausliefern | Staging mit genau diesem Image in einem Stack je Branch, auf Bereitschaft warten | Workspace |
@@ -543,9 +567,6 @@ Betriebs- und Infrastrukturdokumentation liegt bewusst nicht im Repository.
 
 ### Für spätere Iterationen vorgesehen
 
-- Coverage-Schwelle scharf stellen; der Startwert liegt bewusst niedrig, damit
-  der erste grüne Build nicht am Gate scheitert (Story Q-03)
-- `go-junit-report`, damit Jenkins Testergebnisse strukturiert anzeigt (Q-06)
 - Migrationswerkzeug in der Pipeline statt SQL beim Datenbankstart (siehe E-010)
 - Alertmanager mit echter Benachrichtigung (O-06)
 - Deployment-Historie als Ansicht statt als TSV-Datei

@@ -47,6 +47,17 @@ pipeline {
 		STAGING_PROJEKT = "healthgate-staging-${(env.JOB_BASE_NAME ?: 'lokal').toLowerCase().replaceAll('[^a-z0-9_.-]', '-')}"
 		STAGING_COMPOSE = 'deploy/docker-compose.staging.yml'
 
+		// Mindest-Coverage. Der Wert liegt bewusst unter dem aktuellen Stand:
+		// er soll einen Einbruch melden, nicht jede dritte Nachkommastelle
+		// (Story Q-03, Entscheidung E-017).
+		COVERAGE_SCHWELLE = '65'
+		// Version fest gepinnt: ein Werkzeug, das den Build zum Scheitern
+		// bringen kann, darf sich nicht unter der Hand ändern.
+		JUNIT_REPORT_VERSION = 'v2.1.0'
+		// Wegwerf-Datenbank für die Tests des PostgreSQL-Speichers. Der Name
+		// enthält den Build, damit parallele Jobs sich nicht überschreiben.
+		TEST_DB = "healthgate-test-db-${env.BUILD_TAG?.replaceAll('[^A-Za-z0-9_.-]', '-') ?: 'lokal'}"
+
 		// Grenzwerte des Health-Gates. Sie stehen hier und nicht in der .env,
 		// weil sie zur Pipeline gehören und versioniert sein müssen (Story R-04).
 		OBSERVE_DAUER        = '120'
@@ -89,30 +100,65 @@ pipeline {
 
 		stage('Unit-Tests') {
 			steps {
+				sh '''#!/usr/bin/env bash
+					set -euo pipefail
+
+					export PATH="$PATH:$(go env GOPATH)/bin"
+					command -v go-junit-report >/dev/null 2>&1 ||
+						go install "github.com/jstemmer/go-junit-report/v2@${JUNIT_REPORT_VERSION}"
+
+					# Ohne echte Datenbank überspringen sich die Tests des
+					# PostgreSQL-Speichers selbst. Die Coverage-Zahl wiese dann
+					# eine Prüfung aus, die gar nicht stattgefunden hat.
+					docker rm -f "$TEST_DB" >/dev/null 2>&1 || true
+					docker run -d --name "$TEST_DB" -P \
+						-e POSTGRES_USER=test -e POSTGRES_PASSWORD=test -e POSTGRES_DB=test \
+						postgres:16-alpine >/dev/null
+					for versuch in $(seq 1 30); do
+						docker exec "$TEST_DB" pg_isready -U test -d test >/dev/null 2>&1 && break
+						sleep 1
+					done
+					PORT="$(docker port "$TEST_DB" 5432/tcp | head -1 | sed 's/.*://')"
+					export HEALTHGATE_TEST_DB_URL="postgres://test:test@127.0.0.1:${PORT}/test?sslmode=disable"
+
+					cd app
+					# Der Exitcode wird festgehalten statt sofort ausgewertet:
+					# der Bericht soll auch dann entstehen, wenn Tests
+					# fehlschlagen -- sonst zeigt Jenkins beim roten Build gerade
+					# die Ergebnisse nicht an, die man sehen will.
+					set +e
+					go test ./... -v -covermode=count -coverprofile=coverage.out 2>&1 | tee test.log
+					STATUS=${PIPESTATUS[0]}
+					set -e
+
+					go-junit-report -set-exit-code < test.log > test-report.xml || true
+					go tool cover -func=coverage.out | tail -1
+
+					if [ "$STATUS" -ne 0 ]; then
+						echo "Unit-Tests fehlgeschlagen"
+						exit 1
+					fi
+				'''
 				dir('app') {
-					sh '''
-						go test ./... -v -covermode=count -coverprofile=coverage.out 2>&1 | tee test.log
-						go tool cover -func=coverage.out | tail -1
-					'''
-					// TODO(Q-03): Coverage-Schwelle scharf stellen, sobald die
-					// Handler fertig sind. Startwert bewusst niedrig, damit der
-					// erste grüne Build nicht am Gate scheitert.
-					sh '''
-						SCHWELLE=40
+					sh '''#!/usr/bin/env bash
+						set -euo pipefail
 						IST=$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}' | tr -d '%')
-						echo "Coverage: ${IST}% (Mindestwert ${SCHWELLE}%)"
-						awk -v i="$IST" -v s="$SCHWELLE" 'BEGIN{exit !(i<s)}' && {
-							echo "Coverage unter dem Mindestwert"; exit 1;
-						}
-						exit 0
+						echo "Coverage: ${IST}% (Mindestwert ${COVERAGE_SCHWELLE}%)"
+						if awk -v i="$IST" -v s="$COVERAGE_SCHWELLE" 'BEGIN{exit !(i<s)}'; then
+							echo "Coverage unter dem Mindestwert"
+							exit 1
+						fi
 					'''
 				}
 			}
 			post {
 				always {
-					// TODO(Q-06): go-junit-report einbinden, damit Jenkins die
-					// Testergebnisse strukturiert anzeigt statt nur als Text.
-					archiveArtifacts artifacts: 'app/coverage.out, app/test.log', allowEmptyArchive: true
+					// Story Q-06: Jenkins zeigt die Testergebnisse damit als
+					// Tabelle mit Verlauf statt als Textwand im Konsolenprotokoll.
+					junit testResults: 'app/test-report.xml', allowEmptyResults: false
+					archiveArtifacts artifacts: 'app/coverage.out, app/test.log, app/test-report.xml',
+						allowEmptyArchive: true
+					sh 'docker rm -f "$TEST_DB" >/dev/null 2>&1 || true'
 				}
 			}
 		}
@@ -177,6 +223,9 @@ pipeline {
 			}
 			post {
 				always {
+					// Playwright schreibt den JUnit-Bericht nur mit gesetztem
+					// CI; ohne ihn bleibt die Auswertung leer statt rot.
+					junit testResults: 'tests/e2e/test-results/junit.xml', allowEmptyResults: true
 					archiveArtifacts artifacts: 'tests/e2e/playwright-report/**, tests/e2e/test-results/**',
 						allowEmptyArchive: true
 					// Ohne -v: das Datenvolumen bleibt, damit die Migration nicht
