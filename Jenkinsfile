@@ -299,7 +299,15 @@ pipeline {
 					RETTUNG="$(mktemp)"
 					if [ -f "$KONF" ]; then cp "$KONF" "$RETTUNG"; fi
 
-					git fetch --no-tags origin main
+					# Geholt wird aus dem Workspace und nicht von GitHub. Der
+					# Workspace steht bereits auf genau dem Commit, der eben
+					# gebaut und gegen Staging geprueft wurde -- damit liefert
+					# diese Stage nachweislich denselben Stand aus. Nebenbei
+					# braucht die Auslieferung so weder Zugangsdaten noch Netz:
+					# der Jenkins-Benutzer hat keine Anmeldung fuer das private
+					# Repository, und ein Ausfall von GitHub darf ein Deployment
+					# nicht aufhalten (Entscheidung E-023).
+					git fetch --no-tags "${WORKSPACE}" HEAD
 					git checkout -f "${GIT_COMMIT}"
 
 					if [ ! -f "$KONF" ]; then
