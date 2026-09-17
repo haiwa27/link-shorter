@@ -1,6 +1,6 @@
 # Übergabe
 
-Stand: 17.09.2026. Vier Stories umgesetzt, jede als eigener Branch mit eigenem
+Stand: 17.09.2026. Fünf Stories umgesetzt, jede als eigener Branch mit eigenem
 Pull Request. **#10 ist gemerged**, die übrigen warten auf euer Review -- die
 Freigabe liegt bei euch.
 
@@ -11,23 +11,22 @@ wurde nichts geändert.
 
 ## Pull Requests
 
-| PR | Story | Inhalt | Stand |
+| PR | Story | Inhalt | Build |
 |---|---|---|---|
-| [#9](https://github.com/haiwa27/healthgate/pull/9) | P-01 | PostgreSQL als Speicher hinter `store.Speicher` | offen |
-| [#10](https://github.com/haiwa27/healthgate/pull/10) | C-02, C-04 | Pipeline bis einschliesslich E2E grün, Deploy gegen `/home/admin/healthgate` | **gemerged** (PR-10, Build 2 grün) |
-| [#11](https://github.com/haiwa27/healthgate/pull/11) | Q-03, Q-06 | Coverage-Schwelle 65 Prozent, Testdatenbank, JUnit-Berichte | offen |
-| [#12](https://github.com/haiwa27/healthgate/pull/12) | O-04, O-05 | Grafana-Dashboard als Provisioning-Datei, Deployment-Marker | offen |
-| [#13](https://github.com/haiwa27/healthgate/pull/13) | D-01 | diese Datei | offen |
-| [#14](https://github.com/haiwa27/healthgate/pull/14) | C-04 | `safe.directory` und Rettung der `active-slot.conf` beim Checkout | offen |
+| [#9](https://github.com/haiwa27/healthgate/pull/9) | P-01 | PostgreSQL als Speicher hinter `store.Speicher` | grün (Build 2) |
+| [#10](https://github.com/haiwa27/healthgate/pull/10) | C-02, C-04 | Pipeline bis einschliesslich E2E, Deploy gegen `/home/admin/healthgate` | **gemerged** |
+| [#11](https://github.com/haiwa27/healthgate/pull/11) | Q-03, Q-06 | Coverage-Schwelle 65 Prozent, Testdatenbank, JUnit-Berichte | grün (Build 3) |
+| [#12](https://github.com/haiwa27/healthgate/pull/12) | O-04, O-05 | Grafana-Dashboard als Provisioning-Datei, Deployment-Marker | grün (Build 3) |
+| [#13](https://github.com/haiwa27/healthgate/pull/13) | D-01 | diese Datei | grün (Build 3) |
+| [#14](https://github.com/haiwa27/healthgate/pull/14) | C-04 | `safe.directory`, Rettung der `active-slot.conf`, Staging je Branch | grün (Build 2) |
 
-In alle vier offenen Branches ist `main` nach dem Merge von #10 hineingezogen
-worden, die Konflikte sind aufgelöst. Sie lassen sich in beliebiger Reihenfolge
-mergen; sinnvoll ist **#9, #11, #12, #13**, weil #11 die Coverage-Schwelle auf
-einen Wert setzt, den erst die Tests aus #9 vollständig tragen.
+In alle offenen Branches ist `main` nach dem Merge von #10 hineingezogen worden,
+die Konflikte sind aufgelöst, alle fünf Builds sind grün.
 
-Konfliktfrei ist dabei nicht dasselbe wie geprüft: die Pipeline läuft je Branch
-gegen den zusammengeführten Stand. Was die Builds der vier PRs sagen, ist vor
-dem Mergen der jeweils letzte Nachweis.
+**#14 zuerst mergen**: `main` scheitert derzeit an der Stage
+*Deployment-Verzeichnis prüfen*, und genau das behebt #14. Danach #9, dann #11,
+dann #12, dann #13. #11 setzt die Coverage-Schwelle auf einen Wert, den erst die
+Tests aus #9 vollständig tragen.
 
 ### Wie die Konflikte aufgelöst wurden
 
@@ -143,6 +142,15 @@ Beim Nachprüfen kamen zwei Dinge heraus, die PR #14 behebt:
    In einem Klon des Deployment-Verzeichnisses durchgespielt: vorher `green`,
    nach dem Checkout `green`, Arbeitsverzeichnis sauber.
 
+Dazu kam ein dritter Fund, der nichts mit dem Deployment zu tun hat: zwei
+Builds auf verschiedenen Branches liefen gleichzeitig gegen denselben
+Staging-Stack, und der eine räumte dem anderen die Container weg
+(`dependency failed to start: container healthgate-staging-db-1 exited (0)`).
+`disableConcurrentBuilds` gilt nur je Job. Staging bekommt jetzt je Branch einen
+eigenen Projektnamen, einen vom Docker-Daemon vergebenen Port und ein eigenes
+Netz (E-022). In einem Testlauf auf der Maschine geprüft: Port 32770 vergeben,
+`/healthz` grün, Produktion unberührt.
+
 Was bleibt: ein echter Durchlauf auf `main`. Erst der zeigt, ob Bespielen,
 Umschalten und Beobachtungsfenster zusammen tragen.
 
@@ -192,6 +200,8 @@ Alle in `docs/entscheidungen.md` mit Alternativen und Begründung:
 | E-018 | Testdatenbank in der Pipeline |
 | E-019 | Dashboard als Provisioning-Datei |
 | E-020 | Deployment-Marker aus den Metriken statt über die Grafana-API |
+| E-021 | `safe.directory` als Variable der Stage statt in der gitconfig des Agenten |
+| E-022 | Eigener Staging-Stack je Branch statt eines gemeinsamen |
 
 ## Was als Nächstes zu tun ist
 
