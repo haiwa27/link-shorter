@@ -173,7 +173,7 @@ Werte von `route`: `/`, `/healthz`, `/metrics`, `/api/links`, `/assets`, `/:slug
     │   │   ├── handler/           HTTP-Endpunkte; Weiterleitung fällt bei Nichttreffer auf Frontend zurück
     │   │   ├── metrics/           Prometheus-Textformat ohne externe Abhängigkeit
     │   │   ├── shortener/         Fachlogik ohne Abhängigkeiten — unit-getestet
-    │   │   └── store/             Schnittstelle für Datenzugriff; derzeit In-Memory (TODO P-01)
+    │   │   └── store/             Datenzugriff hinter einer Schnittstelle; PostgreSQL oder In-Memory
     │   ├── migrations/            SQL, wird beim Start von PostgreSQL eingelesen
     │   └── Dockerfile             mehrstufig: Frontend, Backend, Alpine-Laufzeitbild
     ├── web/                       React SPA; Vite proxyt /api im Entwicklungsbetrieb
@@ -252,7 +252,7 @@ Standardwerten. `.env.example` enthält neutrale Platzhalter; `.env` ist in
 | `HEALTHGATE_VERSION` | in `prod` | Git-SHA, wird von der Pipeline gesetzt; `dev` ist in `prod` unzulässig |
 | `HEALTHGATE_CHAOS_RATE` | nein | Anteil absichtlicher 500er, `0.0` bis `1.0`, Vorgabe `0.0` |
 | `HEALTHGATE_WEB_VERZEICHNIS` | nein | Pfad der Frontend-Dateien, Vorgabe `/srv/web` |
-| `HEALTHGATE_DB_URL` | nein | Verbindung zu PostgreSQL; wird erst mit Story P-01 ausgewertet |
+| `HEALTHGATE_DB_URL` | in `prod` | Verbindung zu PostgreSQL; ohne sie läuft der In-Memory-Speicher |
 
 ### Datenbank und Deployment
 
@@ -472,13 +472,10 @@ Betriebs- und Infrastrukturdokumentation liegt bewusst nicht im Repository.
 
 ### Für spätere Iterationen vorgesehen
 
-- PostgreSQL statt In-Memory-Speicher (Story P-01). **Solange der
-  In-Memory-Speicher aktiv ist, halten blau und grün getrennte Daten —
-  Blue/Green funktioniert nur scheinbar.** Diese Story muss vor R-01 fertig sein.
 - Coverage-Schwelle scharf stellen; der Startwert liegt bewusst niedrig, damit
   der erste grüne Build nicht am Gate scheitert (Story Q-03)
 - Grafana-Dashboard und Deployment-Marker (Stories O-04, O-05)
 - `go-junit-report`, damit Jenkins Testergebnisse strukturiert anzeigt (Q-06)
-- Migrationswerkzeug in der Pipeline statt SQL beim Datenbankstart
+- Migrationswerkzeug in der Pipeline statt SQL beim Datenbankstart (siehe E-010)
 - Alertmanager mit echter Benachrichtigung (O-06)
 - Deployment-Historie als Ansicht statt als TSV-Datei
