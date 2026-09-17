@@ -318,3 +318,24 @@ Jede Entscheidung, die im Vortrag eine Frage auslösen könnte, gehört hierher.
   `chmod 664` dafür, dass die Gruppe schreiben darf. Der Weg über `sudo` wurde
   verworfen: die Pipeline soll keine erhöhten Rechte bekommen, um eine
   Textdatei zu schreiben.
+
+## E-025: Die Datenquelle wird beim Umstellen der uid ersetzt, nicht geändert
+
+- **Alternativen:** die uid weglassen und im Dashboard die Datenquelle über den
+  Namen ansprechen; die alte Datenquelle von Hand in der Oberfläche löschen
+- **Entscheidung:** `deleteDatasources` vor `datasources` in derselben
+  Provisioning-Datei
+- **Begründung:** Eine Datenquelle, die vor der Provisionierung bestand, trägt
+  eine zufällig vergebene uid. Grafana kann sie nicht auf eine feste umstellen
+  und bricht beim Start ab: `Datasource provisioning error: data source not
+  found`, mit Neustartschleife als Folge. Der Ansprechpartner über den Namen
+  wäre der einfachere Weg, ist aber in Grafana seit Version 10 abgekündigt und
+  bricht irgendwann ohne Vorwarnung. Von Hand löschen behebt es einmal auf einer
+  Maschine und ist beim nächsten Aufsetzen wieder offen -- genau das, was
+  Provisioning verhindern soll. Auf einer frischen Installation ist der
+  `deleteDatasources`-Block wirkungslos.
+
+**Beobachtung nebenbei:** Der Fehler war von aussen nicht zu sehen. Prometheus
+lief weiter, das Health-Gate entschied unverändert, nur Grafana startete im
+Kreis. Wer Dashboards für die Vorführung braucht, sollte sie vorher einmal
+öffnen und nicht darauf vertrauen, dass der Container läuft.
