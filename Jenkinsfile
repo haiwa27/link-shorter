@@ -1,5 +1,11 @@
 // Pipeline für healthgate. Liegt bewusst im Repository, damit jede Änderung
 // an der Auslieferung genauso reviewt wird wie eine Änderung am Code (C-03).
+//
+// Die tragende Regel dieser Datei: gebaut und getestet wird im Jenkins-Workspace,
+// ausgeliefert wird ausschliesslich gegen DEPLOY_DIR. Der Workspace ist bei
+// jedem Lauf ein frischer Checkout und kennt den laufenden Zustand nicht --
+// welcher Slot gerade Verkehr bekommt, steht nur im Deployment-Verzeichnis, aus
+// dem Caddy seine Konfiguration mountet (Entscheidung E-012).
 
 pipeline {
 	agent any
@@ -13,16 +19,35 @@ pipeline {
 
 	environment {
 		SHA          = "${env.GIT_COMMIT?.take(7) ?: 'dev'}"
+		// Das Image trägt den Commit im Namen und wird genau einmal gebaut.
+		// Der Name ist zugleich die Variable, die beide Compose-Dateien lesen;
+		// so kann keine Stage versehentlich ein anderes Artefakt ausliefern.
+		HEALTHGATE_IMAGE = "healthgate:${env.GIT_COMMIT?.take(7) ?: 'dev'}"
+		// Version der E2E-Werkzeuge. Playwright läuft im eigenen Container,
+		// weil die Maschine Node 18 mitbringt und Playwright 20 verlangt.
+		PLAYWRIGHT_IMAGE = 'mcr.microsoft.com/playwright:v1.62.1-noble'
 		// TODO(C-05): eigene Registry eintragen. Platzhalter, damit hier kein
 		// echter Hostname im Repository steht.
 		REGISTRY     = 'registry.beispiel.de/healthgate'
+
+		// Das laufende Deployment. Jede Stage, die den aktiven Slot liest oder
+		// ändert, arbeitet hier und nicht im Workspace.
+		DEPLOY_DIR   = '/home/admin/healthgate'
+		SKRIPTE      = '/home/admin/healthgate/deploy/scripts'
+		// Zugangsdaten liegen ausserhalb des Workspace: der wird bei jedem Lauf
+		// neu ausgecheckt und darf keine Geheimnisse enthalten (E-014).
+		ENV_DATEI    = '/etc/healthgate/.env'
+
 		STAGING_URL  = 'http://localhost:8081'
 		PROD_URL     = 'http://localhost'
-		// TODO(R-04): Grenzwerte gemeinsam festlegen und im Vortrag begründen.
-		OBSERVE_DAUER     = '120'
-		OBSERVE_INTERVALL = '10'
-		OBSERVE_SCHWELLE  = '0.05'
-		PROMETHEUS_URL    = 'http://localhost:9090'
+
+		// Grenzwerte des Health-Gates. Sie stehen hier und nicht in der .env,
+		// weil sie zur Pipeline gehören und versioniert sein müssen (Story R-04).
+		OBSERVE_DAUER        = '120'
+		OBSERVE_INTERVALL    = '10'
+		OBSERVE_SCHWELLE     = '0.05'
+		OBSERVE_MIN_ANFRAGEN = '5'
+		PROMETHEUS_URL       = 'http://localhost:9090'
 	}
 
 	stages {
@@ -31,6 +56,14 @@ pipeline {
 			steps {
 				sh 'git rev-parse --short HEAD'
 				sh 'go version && docker --version && jq --version'
+				sh '''
+					test -r "${ENV_DATEI}" || {
+						echo "FEHLER: ${ENV_DATEI} ist fuer den Jenkins-Benutzer nicht lesbar."
+						echo "        Die Datei gehoert der Gruppe jenkins mit Rechten 640."
+						exit 1
+					}
+					echo "Umgebungsdatei: ${ENV_DATEI}"
+				'''
 				script {
 					currentBuild.displayName = "#${env.BUILD_NUMBER} ${env.SHA}"
 				}
@@ -80,23 +113,28 @@ pipeline {
 
 		stage('Image bauen') {
 			steps {
-				sh 'docker build -f app/Dockerfile -t ${REGISTRY}:${SHA} .'
+				// Zwei Namen für dasselbe Image: der lokale für die Auslieferung
+				// auf dieser Maschine, der Registry-Name für den späteren Push.
+				sh 'docker build -f app/Dockerfile -t ${HEALTHGATE_IMAGE} -t ${REGISTRY}:${SHA} .'
 			}
 		}
 
 		stage('Image veröffentlichen') {
 			steps {
-				// TODO(C-08): Zugangsdaten über withCredentials einbinden.
+				// TODO(C-05): Zugangsdaten über withCredentials einbinden.
 				// Niemals Token im Jenkinsfile oder im Log.
-				echo 'TODO: docker push ${REGISTRY}:${SHA}'
+				echo "TODO: docker push ${REGISTRY}:${SHA}"
 			}
 		}
 
 		stage('Staging ausliefern') {
 			steps {
+				// Staging läuft im Workspace: es ist eine Testumgebung und hält
+				// keinen Zustand, den ein frischer Checkout verlieren könnte.
 				sh '''
-					HEALTHGATE_VERSION=${SHA} \
-						docker compose -f deploy/docker-compose.staging.yml --env-file .env up -d --build
+					HEALTHGATE_VERSION=${SHA} docker compose \
+						-f deploy/docker-compose.staging.yml \
+						--env-file "${ENV_DATEI}" up -d
 				'''
 				sh 'deploy/scripts/wait-healthy.sh ${STAGING_URL} 3 30'
 			}
@@ -104,17 +142,45 @@ pipeline {
 
 		stage('E2E-Tests gegen Staging') {
 			steps {
-				dir('tests/e2e') {
-					sh 'npm ci || npm install'
-					sh 'npx playwright install --with-deps chromium'
-					sh 'BASIS_URL=${STAGING_URL} npx playwright test'
-				}
+				// Playwright läuft im mitgelieferten Container: die Browser sind
+				// darin bereits installiert und passen zur Version aus dem
+				// Lockfile. Die Maschine selbst bleibt unangetastet (E-016).
+				// --network host, damit Staging unter localhost:8081 erreichbar
+				// ist; der Lauf als aufrufender Benutzer, damit die Artefakte
+				// nicht root gehören und Jenkins sie archivieren kann.
+				sh '''
+					docker run --rm --network host \
+						-v "$PWD/tests/e2e":/e2e -w /e2e \
+						-u "$(id -u):$(id -g)" -e HOME=/tmp \
+						-e CI=true -e BASIS_URL=${STAGING_URL} \
+						${PLAYWRIGHT_IMAGE} \
+						sh -c "npm ci && npx playwright test"
+				'''
 			}
 			post {
 				always {
 					archiveArtifacts artifacts: 'tests/e2e/playwright-report/**, tests/e2e/test-results/**',
 						allowEmptyArchive: true
+					sh 'docker compose -f deploy/docker-compose.staging.yml down || true'
 				}
+			}
+		}
+
+		stage('Deployment-Verzeichnis prüfen') {
+			when { branch 'main' }
+			steps {
+				// Lieber hier scheitern als nach der Freigabe mitten im
+				// Umschalten. Die Meldung nennt beim Fehlschlag den Grund.
+				sh '''
+					test -w "${DEPLOY_DIR}" || {
+						echo "FEHLER: ${DEPLOY_DIR} ist fuer den Jenkins-Benutzer nicht beschreibbar."
+						echo "        Einmalig auf der Maschine: sudo usermod -aG admin jenkins"
+						echo "        und anschliessend sudo systemctl restart jenkins."
+						exit 1
+					}
+					echo "Deployment-Verzeichnis: ${DEPLOY_DIR}"
+					git -C "${DEPLOY_DIR}" --no-pager log --oneline -1
+				'''
 			}
 		}
 
@@ -128,21 +194,58 @@ pipeline {
 			}
 		}
 
+		stage('Deployment-Verzeichnis aktualisieren') {
+			when { branch 'main' }
+			steps {
+				// Ohne diesen Schritt liefe ein neues Image gegen die
+				// Compose-Datei und die Skripte eines alten Stands. Der aktive
+				// Slot bleibt dabei unberührt: active-slot.conf ist nicht
+				// versioniert und wird von einem Checkout nicht angefasst.
+				sh '''
+					cd "${DEPLOY_DIR}"
+					git fetch --no-tags origin main
+					git checkout -f "${GIT_COMMIT}"
+					test -f deploy/caddy/active-slot.conf ||
+						cp deploy/caddy/active-slot.conf.vorlage deploy/caddy/active-slot.conf
+					git --no-pager log --oneline -1
+					echo "Aktiver Slot bleibt: $(deploy/scripts/active-slot.sh)"
+				'''
+			}
+		}
+
+		stage('Reverse Proxy abgleichen') {
+			when { branch 'main' }
+			steps {
+				// --no-deps ist hier wesentlich: ohne das Flag zöge Caddy seine
+				// depends_on mit und Compose stellte beide Slots gleichzeitig
+				// auf das neue Image um. Damit wäre Blue/Green aufgehoben und
+				// es gäbe kein Ziel mehr für einen Rollback.
+				sh '''
+					cd "${DEPLOY_DIR}"
+					docker compose -f deploy/docker-compose.prod.yml \
+						--env-file "${ENV_DATEI}" up -d --no-deps caddy
+				'''
+			}
+		}
+
 		stage('Zielslot bespielen') {
 			when { branch 'main' }
 			steps {
 				script {
-					env.ZIEL_SLOT = sh(script: 'deploy/scripts/target-slot.sh', returnStdout: true).trim()
-					env.ALT_SLOT  = sh(script: 'deploy/scripts/active-slot.sh', returnStdout: true).trim()
+					env.ZIEL_SLOT = sh(script: '${SKRIPTE}/target-slot.sh', returnStdout: true).trim()
+					env.ALT_SLOT  = sh(script: '${SKRIPTE}/active-slot.sh', returnStdout: true).trim()
 					echo "Aktiv: ${env.ALT_SLOT} -> bespiele: ${env.ZIEL_SLOT}"
 				}
 				sh '''
+					cd "${DEPLOY_DIR}"
 					if [ "$ZIEL_SLOT" = "blue" ]; then
-						VERSION_BLUE=${SHA} docker compose -f deploy/docker-compose.prod.yml \
-							--env-file .env up -d --build app-blue
+						VERSION_BLUE=${SHA} docker compose \
+							-f deploy/docker-compose.prod.yml --env-file "${ENV_DATEI}" \
+							up -d app-blue
 					else
-						VERSION_GREEN=${SHA} docker compose -f deploy/docker-compose.prod.yml \
-							--env-file .env up -d --build app-green
+						VERSION_GREEN=${SHA} docker compose \
+							-f deploy/docker-compose.prod.yml --env-file "${ENV_DATEI}" \
+							up -d app-green
 					fi
 				'''
 			}
@@ -152,19 +255,17 @@ pipeline {
 			when { branch 'main' }
 			steps {
 				// Story R-03: der neue Slot muss sich mehrfach gesund melden,
-				// bevor er überhaupt Verkehr sieht. Hier wird der Container
-				// direkt angesprochen, nicht über den Reverse Proxy.
-				sh '''
-					PORT=$(docker port healthgate-prod-app-${ZIEL_SLOT}-1 8080/tcp | head -1 | cut -d: -f2)
-					deploy/scripts/wait-healthy.sh "http://localhost:${PORT}" 3 30
-				'''
+				// bevor er überhaupt Verkehr sieht. Geprüft wird der Container
+				// selbst, nicht der Reverse Proxy -- über den Proxy antwortete
+				// noch der alte Slot und die Prüfung wäre wertlos.
+				sh '${SKRIPTE}/wait-healthy.sh container:healthgate-prod-app-${ZIEL_SLOT}-1 3 30'
 			}
 		}
 
 		stage('Umschalten') {
 			when { branch 'main' }
 			steps {
-				sh 'deploy/scripts/switch-slot.sh ${ZIEL_SLOT}'
+				sh '${SKRIPTE}/switch-slot.sh ${ZIEL_SLOT}'
 				script { env.UMGESCHALTET = 'ja' }
 			}
 		}
@@ -174,7 +275,7 @@ pipeline {
 			steps {
 				// Story R-04: das eigentliche Gate. Exitcode 1 trägt in den
 				// post-Block und löst dort den Rollback aus.
-				sh 'deploy/scripts/observe.sh ${ZIEL_SLOT}'
+				sh '${SKRIPTE}/observe.sh ${ZIEL_SLOT}'
 			}
 		}
 	}
@@ -187,7 +288,7 @@ pipeline {
 					// rot -- ein zurückgerolltes Deployment ist kein Erfolg,
 					// sondern ein verhinderter Schaden.
 					echo "Rollback wird ausgeloest (Slot ${env.ZIEL_SLOT} auffaellig)"
-					sh "deploy/scripts/rollback.sh 'Beobachtungsfenster verletzt, Build ${env.BUILD_NUMBER}'"
+					sh "${env.SKRIPTE}/rollback.sh 'Beobachtungsfenster verletzt, Build ${env.BUILD_NUMBER}'"
 				} else {
 					echo 'Kein Umschalten erfolgt, kein Rollback noetig.'
 				}
@@ -197,7 +298,9 @@ pipeline {
 			echo "Version ${env.SHA} aktiv auf Slot ${env.ZIEL_SLOT ?: 'staging'}"
 		}
 		always {
-			sh 'deploy/scripts/active-slot.sh || true'
+			// Auf Branches ohne Deploy-Stages ist das Verzeichnis nicht
+			// zwingend erreichbar, deshalb ohne Folgen für das Ergebnis.
+			sh '${SKRIPTE}/active-slot.sh || true'
 		}
 	}
 }
