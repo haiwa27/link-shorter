@@ -314,6 +314,13 @@ nicht von der Pipeline gesetzt: **Deployment** markiert den Neustart eines Slots
 Grafana-API bräuchte ein Token in den Jenkins-Credentials und setzte den Marker
 auch dann, wenn das Deployment danach zurückgerollt wird (Entscheidung E-020).
 
+Grafana liest Dashboards alle 30 Sekunden neu ein, Datenquellen dagegen nur beim
+Start. Nach einer Änderung an `provisioning/datasources/` gehört deshalb ein
+
+    docker restart healthgate-monitoring-grafana-1
+
+dazu — und ein Blick, ob der Container danach auch oben bleibt (E-025).
+
 **Merksatz:** Caddy prüft nur den Slot, der Verkehr bekommt. Deshalb ist das
 Umschalten im Diagramm auch dann zu sehen, wenn niemand die Anwendung benutzt.
 

@@ -1,15 +1,16 @@
 # Übergabe
 
-Stand: 17.09.2026. Die Strecke läuft von Ende zu Ende. Build #7 auf `main` ist
-vollständig durchgelaufen: gebaut, gegen Staging geprüft, freigegeben, Slot
-`blue` bespielt, umgeschaltet, 120 Sekunden beobachtet -- Fehleranteil 0,0000
-bei 7 bis 20 Anfragen pro Minute, kein Rollback nötig.
+Stand: 17.09.2026. Die Strecke läuft von Ende zu Ende, und zwar **zweimal
+hintereinander**: Build #7 schaltete auf `blue` (`c43ef51`), der Merge von #16
+löste den nächsten aus, der auf `green` (`e0be29d`) schaltete. Beide Male
+gebaut, gegen Staging geprüft, freigegeben, umgeschaltet, 120 Sekunden
+beobachtet -- Fehleranteil 0,0000 bei 7 bis 20 Anfragen pro Minute, kein
+Rollback nötig.
 
-**Produktion läuft jetzt auf Slot `blue` mit Version `c43ef51`**, vorher grün
-mit `fdbce28`. `deploy/state/vorheriger-slot` steht auf `green`, das Rollback-
-Ziel ist also gesetzt und der alte Slot läuft weiter. An `/etc/healthgate/.env`,
-`/home/admin/healthgate/.env`, an Volumes und an der Cloudflare-Konfiguration
-wurde nichts geändert.
+**Produktion läuft auf Slot `green` mit Version `e0be29d`.** Der Wechsel
+funktioniert damit in beide Richtungen, nicht nur einmal. An
+`/etc/healthgate/.env`, `/home/admin/healthgate/.env`, an Volumes und an der
+Cloudflare-Konfiguration wurde nichts geändert.
 
 ## Pull Requests
 
@@ -22,12 +23,13 @@ wurde nichts geändert.
 | [#12](https://github.com/haiwa27/healthgate/pull/12) | O-04, O-05 | Grafana-Dashboard als Provisioning-Datei, Deployment-Marker | **gemerged** |
 | [#13](https://github.com/haiwa27/healthgate/pull/13) | D-01 | diese Datei | **gemerged** |
 | [#15](https://github.com/haiwa27/healthgate/pull/15) | C-04 | Deployment-Stand aus dem Workspace statt von GitHub | **gemerged** |
-| [#16](https://github.com/haiwa27/healthgate/pull/16) | C-04 | Rechte der Slot-Datei für beide Schreiber erhalten | offen |
+| [#16](https://github.com/haiwa27/healthgate/pull/16) | C-04 | Rechte der Slot-Datei für beide Schreiber erhalten | **gemerged** |
+| [#17](https://github.com/haiwa27/healthgate/pull/17) | O-04 | Datenquelle beim Umstellen der uid ersetzen | offen |
 
-### Was der erste echte Deploy zutage gefördert hat
+### Was der Betrieb zutage gefördert hat
 
-Die Deploy-Stages waren bis dahin geschrieben, aber nie gelaufen. Drei Dinge
-fielen erst im laufenden Betrieb auf, jedes davon still genug, um es beinahe zu
+Die Deploy-Stages waren lange geschrieben, aber nie gelaufen. Vier Dinge fielen
+erst im laufenden Betrieb auf, jedes davon still genug, um es beinahe zu
 übersehen:
 
 1. **`dubious ownership`** -- git verweigert die Arbeit in einem Verzeichnis,
@@ -43,6 +45,21 @@ fielen erst im laufenden Betrieb auf, jedes davon still genug, um es beinahe zu
    weiterlas: von aussen sah alles gesund aus, nur der Rollback von Hand war
    still kaputt. Rechte auf der Maschine repariert, Wiederholung verhindert
    (#16, E-024).
+4. **Grafana in der Neustartschleife.** Die feste `uid` der Datenquelle aus O-04
+   lässt sich auf einer bestehenden Installation nicht setzen: Grafana bricht
+   beim Start mit `Datasource provisioning error: data source not found` ab.
+   Auch das war von aussen unsichtbar -- Prometheus lief weiter und das
+   Health-Gate entschied unverändert, nur die Oberfläche war weg. Auf der
+   Maschine behoben, Wiederholung verhindert (#17, E-025).
+
+Das Muster ist in allen vier Fällen dasselbe: der Fehler entsteht aus dem
+Zusammentreffen von zwei Benutzern oder zwei Ständen, und keiner davon meldet
+sich. Genau dafür ist der erste echte Durchlauf da.
+
+**Ein Rest steht noch im Deployment-Verzeichnis:** `prometheus.yml` ist dort von
+Hand korrigiert und weicht von `main` ab, bis #17 gemerged und ausgeliefert ist.
+Der Checkout der nächsten Auslieferung überschreibt die Datei mit demselben
+Inhalt; die Abweichung löst sich also von selbst auf.
 
 ### Wie die Konflikte aufgelöst wurden
 
@@ -51,7 +68,7 @@ von `docs/entscheidungen.md` und streicht in der README einen Punkt aus der List
 der offenen Themen.
 
 - `docs/entscheidungen.md`: beide Seiten behalten, Einträge nach Nummer sortiert
-  (E-008 bis E-024).
+  (E-008 bis E-025).
 - `README.md`: unter *Für spätere Iterationen vorgesehen* fällt jeder Punkt weg,
   dessen Story gemerged ist -- nicht der eine oder der andere, sondern beide.
 - `Jenkinsfile` (#11): der `environment`-Block enthält beides -- die Grenzwerte
@@ -127,10 +144,9 @@ Zwei Deployment-Marker als Annotation, beide aus den Metriken abgeleitet statt
 über die Grafana-API gesetzt (E-020). Die Datenquelle bekommt eine feste `uid`,
 sonst zeigt das Dashboard nach einer Neuinstallation ins Leere.
 
-Geprüft in einem Wegwerf-Grafana auf Port 3001 gegen den echten Prometheus:
-Dashboard provisioniert, sechs Panels, zwei Annotationen, alle Abfragen liefern
-Daten. Der Testcontainer ist wieder entfernt, das laufende Grafana wurde nicht
-angefasst.
+Im laufenden Grafana angekommen und dort geprüft: Datenquelle mit `uid`
+`prometheus`, Dashboard als provisioniert gemeldet, sechs Panels, eine Abfrage
+über die Grafana-Datenquelle liefert `blue c43ef51` und `green e0be29d`.
 
 ## Was nicht funktioniert hat
 
@@ -185,30 +201,28 @@ Alle in `docs/entscheidungen.md` mit Alternativen und Begründung:
 | E-022 | Eigener Staging-Stack je Branch statt eines gemeinsamen |
 | E-023 | Deployment-Stand aus dem Workspace statt von GitHub |
 | E-024 | Die Slot-Datei gehört beiden Schreibern, nicht dem zuletzt Schreibenden |
+| E-025 | Die Datenquelle wird beim Umstellen der uid ersetzt, nicht geändert |
 
 ## Was als Nächstes zu tun ist
 
-1. **#16 prüfen und mergen.** Der PR gehört der jeweils anderen Person zum
+1. **#17 prüfen und mergen.** Der PR gehört der jeweils anderen Person zum
    Review -- alle hier stammen aus derselben Sitzung und haben noch niemanden
-   gesehen.
-2. **Das Monitoring einmal neu laden**, damit Grafana das Dashboard aus #12
-   einliest:
-
-       docker compose -f monitoring/docker-compose.monitoring.yml --env-file .env up -d grafana
-
-3. **Den Rollback vorführen.** Das ist der einzige Teil des Ablaufs, der noch
+   gesehen. Das Dashboard läuft bereits; der Merge sorgt dafür, dass die
+   Korrektur die nächste Auslieferung übersteht.
+2. **Den Rollback vorführen.** Das ist der einzige Teil des Ablaufs, der noch
    nie im Ernst gelaufen ist: das Health-Gate hat bisher nur bestätigt, nie
-   abgebrochen. Dafür den Chaos-Wert des Zielslots setzen -- der nächste
-   Zielslot ist `green`, also `CHAOS_GREEN=0.3` in `/etc/healthgate/.env` --
-   und einen Build laufen lassen. Das Beobachtungsfenster muss dann verletzt
-   melden, `rollback.sh` auf `blue` zurückschwenken und der Build rot bleiben.
-4. **Dabei Last erzeugen.** Ohne Verkehr ist das Fenster aussagelos, und
+   abgebrochen. Dafür den Chaos-Wert des Zielslots setzen -- Produktion liegt
+   auf `green`, der nächste Zielslot ist also `blue` und der Wert heisst
+   `CHAOS_BLUE=0.3` in `/etc/healthgate/.env` -- und einen Build laufen lassen.
+   Das Beobachtungsfenster muss dann verletzt melden, `rollback.sh` auf `green`
+   zurückschwenken und der Build rot bleiben.
+3. **Dabei Last erzeugen.** Ohne Verkehr ist das Fenster aussagelos, und
    `observe.sh` sagt das auch. In einem zweiten Terminal:
 
        deploy/scripts/last-erzeugen.sh http://localhost 5
 
    Im Durchlauf von Build #7 kamen so 7 bis 20 Anfragen pro Minute zusammen --
    genug, damit die Zahlen etwas bedeuten.
-5. **Nach der Vorführung `CHAOS_GREEN` wieder auf `0.0` setzen.** Sonst
+4. **Nach der Vorführung `CHAOS_BLUE` wieder auf `0.0` setzen.** Sonst
    scheitert das nächste echte Deployment an einem Fehler, den jemand absichtlich
    eingebaut und vergessen hat.
