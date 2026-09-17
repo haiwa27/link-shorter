@@ -15,6 +15,14 @@ KONF="${KONF_DATEI:-$HIER/../caddy/active-slot.conf}"
 ZUSTAND="${ZUSTAND_VERZEICHNIS:-$HIER/../state}"
 CADDY_CONTAINER="${CADDY_CONTAINER:-healthgate-prod-caddy-1}"
 
+# Erster Lauf auf einer frischen Maschine: die Datei ist Laufzeitzustand und
+# liegt deshalb nicht im Repository. Ohne diesen Zweig legte Docker beim Start
+# von Caddy ein Verzeichnis an dieser Stelle an und der Proxy käme nicht hoch.
+if [ ! -f "$KONF" ]; then
+	echo "Hinweis: $KONF fehlt, wird aus der Vorlage angelegt."
+	cp "$KONF.vorlage" "$KONF"
+fi
+
 VORHER="$("$HIER/active-slot.sh")"
 if [ "$VORHER" = "$ZIEL" ]; then
 	echo "Hinweis: $ZIEL bekommt bereits Verkehr, nichts zu tun."
