@@ -470,14 +470,22 @@ Voraussetzungen auf der Maschine, einmalig einzurichten:
 |---|---|
 | `/etc/healthgate/.env`, Gruppe `jenkins`, Rechte `640` | Zugangsdaten gehören nicht in den Workspace (E-014) |
 | Jenkins-Benutzer mit Schreibrecht auf `/home/admin/healthgate` | Deploy-Stages schreiben den aktiven Slot und die Historie |
+| setgid auf `deploy/caddy` und `deploy/state` | Laufzeitdateien bleiben für beide Schreiber les- und schreibbar (E-024) |
 
 Das Schreibrecht wird über die Gruppe erteilt, nicht über `sudo`:
 
     sudo usermod -aG admin jenkins
     sudo systemctl restart jenkins
+    chmod g+s deploy/caddy deploy/state
 
 Die Stage `Deployment-Verzeichnis prüfen` bricht mit genau diesem Hinweis ab,
 wenn das Recht fehlt — und zwar vor der Freigabe, nicht mitten im Umschalten.
+
+**Merksatz:** Das setgid-Bit ist kein Detail. `active-slot.conf` wird
+abwechselnd von der Pipeline und von Hand geschrieben; ohne gemeinsame Gruppe
+legt der eine sie mit `600` an und der andere kommt nicht mehr heran. Caddy
+liest sie als root im Container weiter — von aussen sieht dann alles gesund aus,
+und nur der Rollback von Hand ist still kaputt (E-024).
 
 Weil das Verzeichnis dem Benutzer `admin` gehört und nicht Jenkins, verweigert
 git dort sonst jede Operation. Die Ausnahme steht als `safe.directory` im
