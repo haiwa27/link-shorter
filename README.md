@@ -91,8 +91,10 @@ Umschalten ab und der metrikbasierte Rollback käme nie zum Einsatz.
 1. **Die Anwendung ist zustandslos.** Beide Slots sprechen dieselbe Datenbank.
    Ohne das wäre ein Umschalten mit Datenverlust verbunden.
 2. **Der aktive Slot steht in genau einer Datei.** `deploy/caddy/active-slot.conf`
-   ist die einzige Quelle der Wahrheit; `active-slot.sh` liest sie,
-   `switch-slot.sh` schreibt sie. Kein zweiter Ort, der abweichen könnte.
+   im Deployment-Verzeichnis ist die einzige Quelle der Wahrheit;
+   `active-slot.sh` liest sie, `switch-slot.sh` schreibt sie. Sie ist
+   Laufzeitzustand und deshalb nicht versioniert — im Repository liegt nur
+   `active-slot.conf.vorlage` (Entscheidung E-015).
 3. **Das Umschalten unterbricht keine Verbindung.** Caddy übernimmt die neue
    Konfiguration über die Admin-Schnittstelle; die Anwendung räumt beim Beenden
    mit zehn Sekunden Auslaufzeit ab.
@@ -178,7 +180,7 @@ Werte von `route`: `/`, `/healthz`, `/metrics`, `/api/links`, `/assets`, `/:slug
     │   └── Dockerfile             mehrstufig: Frontend, Backend, Alpine-Laufzeitbild
     ├── web/                       React SPA; Vite proxyt /api im Entwicklungsbetrieb
     ├── deploy/
-    │   ├── caddy/                 Caddyfile und active-slot.conf — der aktive Slot
+    │   ├── caddy/                 Caddyfile und Vorlage für active-slot.conf
     │   ├── scripts/               Umschalten, Warten, Beobachten, Rollback, Lastgenerierung
     │   ├── state/                 Laufzeitzustand: vorheriger Slot, Historie (nicht versioniert)
     │   ├── docker-compose.staging.yml
@@ -265,6 +267,7 @@ Standardwerten. `.env.example` enthält neutrale Platzhalter; `.env` ist in
 | `VERSION_GREEN` | nein | ausgelieferte Version in Slot grün, Vorgabe `dev` |
 | `CHAOS_BLUE` | nein | Chaos-Rate für Slot blau, Vorgabe `0.0` |
 | `CHAOS_GREEN` | nein | Chaos-Rate für Slot grün, Vorgabe `0.0` |
+| `HEALTHGATE_IMAGE` | ja | auszulieferndes Image, z. B. `healthgate:abc1234`; von der Pipeline gesetzt |
 | `REGISTRY` | ja für Push | Ziel der Container-Images |
 | `CADDY_CONTAINER` | nein | Containername für den Neuladevorgang, Vorgabe `healthgate-prod-caddy-1` |
 | `KONF_DATEI` | nein | Pfad zu `active-slot.conf`, überschreibt die Vorgabe |
@@ -319,7 +322,8 @@ Umschalten im Diagramm auch dann zu sehen, wenn niemand die Anwendung benutzt.
 
     deploy/scripts/active-slot.sh                  Slot ausgeben, der Verkehr bekommt
     deploy/scripts/target-slot.sh                  den untätigen Slot ausgeben
-    deploy/scripts/wait-healthy.sh <url> [n] [max] warten, bis n Abfragen in Folge grün sind
+    deploy/scripts/wait-healthy.sh <ziel> [n] [max] warten, bis n Abfragen in Folge grün sind
+                                                   ziel: URL oder container:<name>
     deploy/scripts/switch-slot.sh <blue|green>     Verkehr umschalten, vorherigen Slot vermerken
     deploy/scripts/observe.sh <blue|green>         Beobachtungsfenster; Exitcode 1 bei Verstoß
     deploy/scripts/rollback.sh [grund]             auf den vermerkten Slot zurückschalten
@@ -407,20 +411,48 @@ Kollisionsfehler in Produktion auf.
 Die Pipeline liegt als `Jenkinsfile` im Repository, damit eine Änderung an der
 Auslieferung genauso reviewt wird wie eine Änderung am Code.
 
-| Stage | Prüft bzw. tut |
+| Stage | Prüft bzw. tut | Arbeitet in |
+|---|---|---|
+| Vorbereitung | Werkzeuge vorhanden, `.env` lesbar, Build-Name auf Git-SHA setzen | Workspace |
+| Statische Analyse | `go vet`; unformatierter Code bricht ab | Workspace |
+| Unit-Tests | Tests plus Coverage-Schwelle; Bericht als Artefakt | Workspace |
+| Image bauen | ein Image mit SHA-Tag, lokal und für die Registry | Workspace |
+| Image veröffentlichen | Push in die Registry (offen, Story C-05) | Workspace |
+| Staging ausliefern | Staging mit genau diesem Image, auf Bereitschaft warten | Workspace |
+| E2E-Tests gegen Staging | Playwright; Bericht und Spuren als Artefakt | Workspace |
+| Deployment-Verzeichnis prüfen | Schreibrecht und Stand des Deployments, nur auf `main` | Deployment |
+| Freigabe für Produktion | bewusste menschliche Entscheidung, nur auf `main` | — |
+| Deployment-Verzeichnis aktualisieren | Checkout des gebauten Commits; aktiver Slot bleibt unberührt | Deployment |
+| Reverse Proxy abgleichen | Caddy auf den geprüften Stand, ohne die Slots mitzuziehen | Deployment |
+| Zielslot bespielen | untätigen Slot mit dem gebauten Image starten | Deployment |
+| Prüfung vor dem Umschalten | dreimal `/healthz` direkt am Container | Deployment |
+| Umschalten | Caddy auf den neuen Slot, vorherigen vermerken | Deployment |
+| Beobachtungsfenster | 5xx-Anteil gegen den Grenzwert; Exitcode steuert den Rollback | Deployment |
+
+### Workspace und Deployment-Verzeichnis
+
+Gebaut und getestet wird im Jenkins-Workspace, ausgeliefert wird gegen
+`/home/admin/healthgate`. Der Workspace ist bei jedem Lauf ein frischer Checkout
+und kennt den laufenden Zustand nicht; Caddy mountet `active-slot.conf` aus dem
+Deployment-Verzeichnis. Liefe `switch-slot.sh` im Workspace, beschriebe es die
+Workspace-Kopie: das Umschalten bliebe wirkungslos, `observe.sh` beobachtete den
+falschen Slot, und der Build wäre grün, ohne dass etwas passiert ist
+(Entscheidung E-012).
+
+Voraussetzungen auf der Maschine, einmalig einzurichten:
+
+| Was | Warum |
 |---|---|
-| Vorbereitung | Werkzeuge vorhanden, Build-Name auf Git-SHA setzen |
-| Statische Analyse | `go vet`; unformatierter Code bricht ab |
-| Unit-Tests | Tests plus Coverage-Schwelle; Bericht als Artefakt |
-| Image bauen | Container-Image mit SHA-Tag |
-| Image veröffentlichen | Push in die Registry (offen, Story C-05) |
-| Staging ausliefern | Staging-Stack neu starten, auf Bereitschaft warten |
-| E2E-Tests gegen Staging | Playwright; Bericht und Spuren als Artefakt |
-| Freigabe für Produktion | bewusste menschliche Entscheidung, nur auf `main` |
-| Zielslot bespielen | untätigen Slot mit der neuen Version starten |
-| Prüfung vor dem Umschalten | dreimal `/healthz` direkt am Container |
-| Umschalten | Caddy auf den neuen Slot, vorherigen vermerken |
-| Beobachtungsfenster | 5xx-Anteil gegen den Grenzwert; Exitcode steuert den Rollback |
+| `/etc/healthgate/.env`, Gruppe `jenkins`, Rechte `640` | Zugangsdaten gehören nicht in den Workspace (E-014) |
+| Jenkins-Benutzer mit Schreibrecht auf `/home/admin/healthgate` | Deploy-Stages schreiben den aktiven Slot und die Historie |
+
+Das Schreibrecht wird über die Gruppe erteilt, nicht über `sudo`:
+
+    sudo usermod -aG admin jenkins
+    sudo systemctl restart jenkins
+
+Die Stage `Deployment-Verzeichnis prüfen` bricht mit genau diesem Hinweis ab,
+wenn das Recht fehlt — und zwar vor der Freigabe, nicht mitten im Umschalten.
 
 ### Deploy-Ablauf
 
@@ -435,8 +467,10 @@ vorangegangenes Umschalten findet nicht statt — das steuert das Merkmal
 
 ### Supply Chain
 
-Images werden über den Git-SHA eindeutig referenziert; `latest` zeigt auf den
-letzten grünen Build von `main`. Zugangsdaten liegen ausschließlich in den
+Images werden über den Git-SHA eindeutig referenziert. Gebaut wird genau einmal
+je Commit; Staging und beide Produktionsslots ziehen dasselbe Artefakt über
+`HEALTHGATE_IMAGE`. Baute Produktion neu, wäre das ausgelieferte Image nicht das
+getestete (Entscheidung E-013). Zugangsdaten liegen ausschließlich in den
 Jenkins-Credentials und erscheinen nicht im Build-Log. Das Laufzeitbild führt
 die Anwendung als unprivilegierter Benutzer aus, CGO ist abgeschaltet.
 
