@@ -1,7 +1,12 @@
 apiVersion: 1
 
+# Die uid ist fest vergeben und nicht dem Zufall überlassen: die
+# Dashboard-Dateien verweisen darauf. Ohne feste uid erzeugt Grafana bei jeder
+# Neuinstallation eine andere, und die provisionierten Dashboards zeigen auf
+# eine Datenquelle, die es nicht gibt.
 datasources:
   - name: Prometheus
+    uid: prometheus
     type: prometheus
     access: proxy
     url: http://prometheus:9090

@@ -47,7 +47,7 @@ Jenkins · Playwright · ohne Authentifizierung (Scope-Entscheidung)
 | Blue/Green | `deploy/` | zwei Produktionsslots, atomares Umschalten am Reverse Proxy |
 | Health-Gate | `deploy/scripts/observe.sh` | Beobachtungsfenster mit Prometheus-Abfrage, Exitcode steuert den Rollback |
 | Pipeline | `Jenkinsfile` | Build, Tests, Staging, E2E, Freigabe, Umschalten, Beobachtung, Rollback |
-| Observability | `monitoring/` | Prometheus mit Alarmregeln, Grafana mit vorkonfigurierter Datenquelle |
+| Observability | `monitoring/` | Prometheus mit Alarmregeln, Grafana mit Datenquelle und Dashboard als Datei |
 | E2E-Tests | `tests/e2e/` | Playwright gegen Staging, läuft als Gate vor Produktion |
 
 **Health-Gate.** Der Kern des Projekts. `observe.sh` fragt in festen Abständen
@@ -287,6 +287,32 @@ Standardwerten. `.env.example` enthält neutrale Platzhalter; `.env` ist in
 grünes Fenster nichts aus; `observe.sh` weist darauf hin, statt ein Deployment
 stillschweigend zu bestätigen.
 
+### Dashboard
+
+`monitoring/grafana/provisioning/dashboards/healthgate.json` wird beim Start von
+Grafana geladen und liegt im Ordner *healthgate*. Es ist eine Datei im
+Repository und kein in der Oberfläche geklicktes Dashboard: sonst lebte es im
+Grafana-Volume, wäre nicht reviewbar und beim nächsten frischen Aufsetzen weg
+(Entscheidung E-019).
+
+| Panel | Zeigt |
+|---|---|
+| Fehlerrate je Slot | denselben Ausdruck, über den `observe.sh` entscheidet, mit Grenzwertlinie bei 5 % |
+| Slot mit Nutzerverkehr | welcher Slot bedient; Health-Checks sind ausgenommen |
+| Anfragen je Sekunde je Slot | das Umschalten als Übergang, einschließlich Health-Checks |
+| Mittlere Antwortzeit je Route | Summe durch Anzahl; Quantile gibt es bewusst nicht (E-004) |
+| Ausgelieferte Version je Slot | was gerade wo läuft |
+| Laufzeit je Slot | ein Sprung auf null ist ein Neustart |
+
+Zwei Deployment-Marker als Annotation, beide aus den Metriken abgeleitet und
+nicht von der Pipeline gesetzt: **Deployment** markiert den Neustart eines Slots,
+**Umschalten** den Moment, in dem ein Slot Verkehr bekommt. Der Weg über die
+Grafana-API bräuchte ein Token in den Jenkins-Credentials und setzte den Marker
+auch dann, wenn das Deployment danach zurückgerollt wird (Entscheidung E-020).
+
+**Merksatz:** Caddy prüft nur den Slot, der Verkehr bekommt. Deshalb ist das
+Umschalten im Diagramm auch dann zu sehen, wenn niemand die Anwendung benutzt.
+
 ---
 
 ## Betriebsskripte
@@ -458,7 +484,7 @@ Betriebs- und Infrastrukturdokumentation liegt bewusst nicht im Repository.
 - Unit-Tests über Fachlogik, Konfiguration, Metriken und Handler
 - Umschalt-, Warte-, Beobachtungs- und Rollback-Skripte
 - Compose-Dateien für Staging und Produktion mit beiden Slots
-- Prometheus mit Alarmregeln, Grafana mit vorkonfigurierter Datenquelle
+- Prometheus mit Alarmregeln, Grafana mit Datenquelle und provisioniertem Dashboard
 - Playwright-Suite über den vollständigen Ablauf
 - `Jenkinsfile` mit allen Stages einschließlich Rollback im `post`-Block
 - Git-Arbeitsablauf: Hooks, Vorlagen, Story- und Release-Werkzeuge
@@ -477,7 +503,6 @@ Betriebs- und Infrastrukturdokumentation liegt bewusst nicht im Repository.
   Blue/Green funktioniert nur scheinbar.** Diese Story muss vor R-01 fertig sein.
 - Coverage-Schwelle scharf stellen; der Startwert liegt bewusst niedrig, damit
   der erste grüne Build nicht am Gate scheitert (Story Q-03)
-- Grafana-Dashboard und Deployment-Marker (Stories O-04, O-05)
 - `go-junit-report`, damit Jenkins Testergebnisse strukturiert anzeigt (Q-06)
 - Migrationswerkzeug in der Pipeline statt SQL beim Datenbankstart
 - Alertmanager mit echter Benachrichtigung (O-06)
