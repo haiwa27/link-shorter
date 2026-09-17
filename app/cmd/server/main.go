@@ -29,10 +29,24 @@ func main() {
 
 	registry := metrics.NeueRegistry(cfg.Slot, cfg.Version)
 
-	// TODO(P-01): In-Memory-Speicher durch PostgreSQL ersetzen. Die Schnittstelle
-	// store.Speicher bleibt dabei unverändert, es kommt nur eine zweite
-	// Implementierung dazu. cfg.DatenbankURL ist bereits vorhanden.
+	// Ohne Datenbank-URL bleibt der In-Memory-Speicher: das hält den lokalen
+	// Start ohne Docker möglich. In Produktion erzwingt config.Laden die URL,
+	// denn dort halten getrennte Daten je Slot das Blue/Green nur zum Schein
+	// aufrecht (Story P-01).
 	speicher := store.NeuerSpeicher()
+	if cfg.DatenbankURL != "" {
+		speicher, err = store.NeuerPostgresSpeicher(context.Background(), cfg.DatenbankURL)
+		if err != nil {
+			log.Error("Datenhaltung nicht verwendbar", "fehler", err)
+			os.Exit(1)
+		}
+		log.Info("Datenhaltung: PostgreSQL")
+	} else {
+		log.Warn("Datenhaltung: im Prozess, Daten sind je Slot getrennt")
+	}
+	if s, ok := speicher.(store.Schliessbar); ok {
+		defer s.Schliessen()
+	}
 
 	router := handler.NeuerRouter(handler.Abhaengigkeiten{
 		Speicher:       speicher,
