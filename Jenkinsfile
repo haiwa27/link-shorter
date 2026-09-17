@@ -38,8 +38,14 @@ pipeline {
 		// neu ausgecheckt und darf keine Geheimnisse enthalten (E-014).
 		ENV_DATEI    = '/etc/healthgate/.env'
 
-		STAGING_URL  = 'http://localhost:8081'
 		PROD_URL     = 'http://localhost'
+		// Eigener Staging-Stack je Branch. disableConcurrentBuilds gilt nur je
+		// Job; zwei Branches bauen sehr wohl gleichzeitig, und ein gemeinsamer
+		// Stack heisst dann, dass der eine Build dem anderen die Container unter
+		// den Füssen wegräumt (Entscheidung E-022). Die Adresse steht hier
+		// bewusst nicht: der Port wird beim Start vergeben.
+		STAGING_PROJEKT = "healthgate-staging-${(env.JOB_BASE_NAME ?: 'lokal').toLowerCase().replaceAll('[^a-z0-9_.-]', '-')}"
+		STAGING_COMPOSE = 'deploy/docker-compose.staging.yml'
 
 		// Grenzwerte des Health-Gates. Sie stehen hier und nicht in der .env,
 		// weil sie zur Pipeline gehören und versioniert sein müssen (Story R-04).
@@ -132,10 +138,22 @@ pipeline {
 				// Staging läuft im Workspace: es ist eine Testumgebung und hält
 				// keinen Zustand, den ein frischer Checkout verlieren könnte.
 				sh '''
-					HEALTHGATE_VERSION=${SHA} docker compose \
-						-f deploy/docker-compose.staging.yml \
+					STAGING_PORT=0 HEALTHGATE_VERSION=${SHA} docker compose \
+						-p "${STAGING_PROJEKT}" -f "${STAGING_COMPOSE}" \
 						--env-file "${ENV_DATEI}" up -d
 				'''
+				script {
+					// Der Port wird beim Start vergeben, also hier erfragt und
+					// nicht im Jenkinsfile festgeschrieben.
+					env.STAGING_URL = sh(
+						script: '''
+							PORT=$(docker compose -p "${STAGING_PROJEKT}" -f "${STAGING_COMPOSE}" \
+								--env-file "${ENV_DATEI}" port app 8080 | sed 's/.*://')
+							echo "http://localhost:${PORT}"
+						''',
+						returnStdout: true).trim()
+					echo "Staging erreichbar unter ${env.STAGING_URL}"
+				}
 				sh 'deploy/scripts/wait-healthy.sh ${STAGING_URL} 3 30'
 			}
 		}
@@ -161,13 +179,28 @@ pipeline {
 				always {
 					archiveArtifacts artifacts: 'tests/e2e/playwright-report/**, tests/e2e/test-results/**',
 						allowEmptyArchive: true
-					sh 'docker compose -f deploy/docker-compose.staging.yml down || true'
+					// Ohne -v: das Datenvolumen bleibt, damit die Migration nicht
+					// bei jedem Lauf neu durchlaufen muss.
+					sh '''
+						STAGING_PORT=0 docker compose -p "${STAGING_PROJEKT}" \
+							-f "${STAGING_COMPOSE}" --env-file "${ENV_DATEI}" down || true
+					'''
 				}
 			}
 		}
 
 		stage('Deployment-Verzeichnis prüfen') {
 			when { branch 'main' }
+			environment {
+				// Der Jenkins-Benutzer ist nicht Eigentümer des
+				// Deployment-Verzeichnisses. Ohne diese Ausnahme verweigert git
+				// dort jede Operation ("dubious ownership"). Als Variable und
+				// nicht in der globalen gitconfig des Agenten: die Pipeline soll
+				// nicht von Zustand abhängen, den niemand versioniert (E-021).
+				GIT_CONFIG_COUNT   = '1'
+				GIT_CONFIG_KEY_0   = 'safe.directory'
+				GIT_CONFIG_VALUE_0 = "${DEPLOY_DIR}"
+			}
 			steps {
 				// Lieber hier scheitern als nach der Freigabe mitten im
 				// Umschalten. Die Meldung nennt beim Fehlschlag den Grund.
@@ -196,17 +229,41 @@ pipeline {
 
 		stage('Deployment-Verzeichnis aktualisieren') {
 			when { branch 'main' }
+			environment {
+				GIT_CONFIG_COUNT   = '1'
+				GIT_CONFIG_KEY_0   = 'safe.directory'
+				GIT_CONFIG_VALUE_0 = "${DEPLOY_DIR}"
+			}
 			steps {
 				// Ohne diesen Schritt liefe ein neues Image gegen die
-				// Compose-Datei und die Skripte eines alten Stands. Der aktive
-				// Slot bleibt dabei unberührt: active-slot.conf ist nicht
-				// versioniert und wird von einem Checkout nicht angefasst.
+				// Compose-Datei und die Skripte eines alten Stands.
+				//
+				// Der aktive Slot wird dabei ausdrücklich gerettet. Steht das
+				// Deployment noch auf einem Stand, in dem active-slot.conf
+				// versioniert war, entfernt der Checkout die Datei -- sie ist im
+				// Zielstand nicht mehr im Index. Aus der Vorlage neu angelegt
+				// zeigte sie auf blue, und der aktive Slot spränge still zurück,
+				// ohne dass irgendetwas fehlschlägt.
 				sh '''
 					cd "${DEPLOY_DIR}"
+					KONF=deploy/caddy/active-slot.conf
+					RETTUNG="$(mktemp)"
+					if [ -f "$KONF" ]; then cp "$KONF" "$RETTUNG"; fi
+
 					git fetch --no-tags origin main
 					git checkout -f "${GIT_COMMIT}"
-					test -f deploy/caddy/active-slot.conf ||
-						cp deploy/caddy/active-slot.conf.vorlage deploy/caddy/active-slot.conf
+
+					if [ ! -f "$KONF" ]; then
+						if [ -s "$RETTUNG" ]; then
+							cp "$RETTUNG" "$KONF"
+							echo "Hinweis: aktiver Slot aus dem Stand vor dem Checkout wiederhergestellt"
+						else
+							cp "$KONF.vorlage" "$KONF"
+							echo "Hinweis: aktiver Slot aus der Vorlage angelegt"
+						fi
+					fi
+					rm -f "$RETTUNG"
+
 					git --no-pager log --oneline -1
 					echo "Aktiver Slot bleibt: $(deploy/scripts/active-slot.sh)"
 				'''
