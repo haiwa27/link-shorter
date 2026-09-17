@@ -47,13 +47,20 @@ bereits vor dem Umschalten abbrechen und der interessante Fall nie eintreten.
 ## Zustand und Datenhaltung
 
 Die Anwendung ist zustandslos. Beide Slots sprechen dieselbe Datenbank, sonst
-wäre ein Umschalten mit Datenverlust verbunden. Solange der In-Memory-Speicher
-aus dem Projektgerüst aktiv ist, gilt das nicht -- das ist der Grund, weshalb
-Story P-01 vor Story R-01 fertig sein muss.
+wäre ein Umschalten mit Datenverlust verbunden. Seit Story P-01 ist das der
+Normalfall: `store.Speicher` hat eine PostgreSQL-Implementierung auf Basis von
+pgx, und in `prod` erzwingt die Konfiguration die Datenbank-URL. Der
+In-Memory-Speicher bleibt als Rückfallweg für den lokalen Start ohne Docker.
+
+Der Aufrufzähler wird dabei in der Datenbank erhöht und nicht im Prozess. Sonst
+hinge die Zahl davon ab, welcher Slot die Weiterleitung bedient hat, und wäre
+nach jedem Umschalten eine andere.
+
+`/healthz` fragt über `Pruefen` die Datenbank wirklich an. Ein Slot ohne
+Datenbank meldet damit 503, Caddy nimmt ihn aus dem Verkehr, und die Pipeline
+schaltet gar nicht erst um.
 
 ## Offene Punkte
 
-- TODO(P-01): PostgreSQL-Implementierung von `store.Speicher`
-- TODO(Q-03): Coverage-Schwelle scharf stellen
 - TODO(C-05): eigene Registry, Push aktivieren
 - TODO(O-06): Alertmanager mit echter Benachrichtigung
