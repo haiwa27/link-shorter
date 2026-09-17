@@ -175,7 +175,7 @@ Werte von `route`: `/`, `/healthz`, `/metrics`, `/api/links`, `/assets`, `/:slug
     │   │   ├── handler/           HTTP-Endpunkte; Weiterleitung fällt bei Nichttreffer auf Frontend zurück
     │   │   ├── metrics/           Prometheus-Textformat ohne externe Abhängigkeit
     │   │   ├── shortener/         Fachlogik ohne Abhängigkeiten — unit-getestet
-    │   │   └── store/             Schnittstelle für Datenzugriff; derzeit In-Memory (TODO P-01)
+    │   │   └── store/             Datenzugriff hinter einer Schnittstelle; PostgreSQL oder In-Memory
     │   ├── migrations/            SQL, wird beim Start von PostgreSQL eingelesen
     │   └── Dockerfile             mehrstufig: Frontend, Backend, Alpine-Laufzeitbild
     ├── web/                       React SPA; Vite proxyt /api im Entwicklungsbetrieb
@@ -254,7 +254,7 @@ Standardwerten. `.env.example` enthält neutrale Platzhalter; `.env` ist in
 | `HEALTHGATE_VERSION` | in `prod` | Git-SHA, wird von der Pipeline gesetzt; `dev` ist in `prod` unzulässig |
 | `HEALTHGATE_CHAOS_RATE` | nein | Anteil absichtlicher 500er, `0.0` bis `1.0`, Vorgabe `0.0` |
 | `HEALTHGATE_WEB_VERZEICHNIS` | nein | Pfad der Frontend-Dateien, Vorgabe `/srv/web` |
-| `HEALTHGATE_DB_URL` | nein | Verbindung zu PostgreSQL; wird erst mit Story P-01 ausgewertet |
+| `HEALTHGATE_DB_URL` | in `prod` | Verbindung zu PostgreSQL; ohne sie läuft der In-Memory-Speicher |
 
 ### Datenbank und Deployment
 
@@ -273,6 +273,7 @@ Standardwerten. `.env.example` enthält neutrale Platzhalter; `.env` ist in
 | `KONF_DATEI` | nein | Pfad zu `active-slot.conf`, überschreibt die Vorgabe |
 | `ZUSTAND_VERZEICHNIS` | nein | Pfad zu `deploy/state` |
 | `BASIS_URL` | nein | Basis-URL für Playwright und `rollback.sh` |
+| `STAGING_PORT` | nein | Host-Port von Staging, Vorgabe `8081`; `0` vergibt einen freien Port |
 | `WAIT_PAUSE` | nein | Sekunden zwischen Health-Abfragen, Vorgabe `2` |
 
 ### Health-Gate und Monitoring
@@ -416,7 +417,7 @@ Auslieferung genauso reviewt wird wie eine Änderung am Code.
 | Unit-Tests | Tests gegen eine Wegwerf-Datenbank, Coverage-Schwelle, JUnit-Bericht | Workspace |
 | Image bauen | ein Image mit SHA-Tag, lokal und für die Registry | Workspace |
 | Image veröffentlichen | Push in die Registry (offen, Story C-05) | Workspace |
-| Staging ausliefern | Staging mit genau diesem Image, auf Bereitschaft warten | Workspace |
+| Staging ausliefern | Staging mit genau diesem Image in einem Stack je Branch, auf Bereitschaft warten | Workspace |
 | E2E-Tests gegen Staging | Playwright; Bericht und Spuren als Artefakt | Workspace |
 | Deployment-Verzeichnis prüfen | Schreibrecht und Stand des Deployments, nur auf `main` | Deployment |
 | Freigabe für Produktion | bewusste menschliche Entscheidung, nur auf `main` | — |
@@ -451,6 +452,16 @@ Das Schreibrecht wird über die Gruppe erteilt, nicht über `sudo`:
 
 Die Stage `Deployment-Verzeichnis prüfen` bricht mit genau diesem Hinweis ab,
 wenn das Recht fehlt — und zwar vor der Freigabe, nicht mitten im Umschalten.
+
+Weil das Verzeichnis dem Benutzer `admin` gehört und nicht Jenkins, verweigert
+git dort sonst jede Operation. Die Ausnahme steht als `safe.directory` im
+`environment`-Block der betroffenen Stages und nicht in der gitconfig des
+Agenten — sonst hinge die Pipeline an Zustand, den niemand versioniert (E-021).
+
+**Merksatz:** Beim ersten Deployment nach dieser Umstellung entfernt der
+Checkout im Deployment-Verzeichnis die dort noch versionierte
+`active-slot.conf`. Die Stage sichert sie vorher und stellt sie danach wieder
+her. Ohne das käme sie aus der Vorlage zurück — und die zeigt auf `blue`.
 
 ### Deploy-Ablauf
 
@@ -530,10 +541,7 @@ Betriebs- und Infrastrukturdokumentation liegt bewusst nicht im Repository.
 
 ### Für spätere Iterationen vorgesehen
 
-- PostgreSQL statt In-Memory-Speicher (Story P-01). **Solange der
-  In-Memory-Speicher aktiv ist, halten blau und grün getrennte Daten —
-  Blue/Green funktioniert nur scheinbar.** Diese Story muss vor R-01 fertig sein.
 - Grafana-Dashboard und Deployment-Marker (Stories O-04, O-05)
-- Migrationswerkzeug in der Pipeline statt SQL beim Datenbankstart
+- Migrationswerkzeug in der Pipeline statt SQL beim Datenbankstart (siehe E-010)
 - Alertmanager mit echter Benachrichtigung (O-06)
 - Deployment-Historie als Ansicht statt als TSV-Datei
