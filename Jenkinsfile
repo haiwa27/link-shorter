@@ -168,6 +168,16 @@ pipeline {
 
 		stage('Deployment-Verzeichnis prüfen') {
 			when { branch 'main' }
+			environment {
+				// Der Jenkins-Benutzer ist nicht Eigentümer des
+				// Deployment-Verzeichnisses. Ohne diese Ausnahme verweigert git
+				// dort jede Operation ("dubious ownership"). Als Variable und
+				// nicht in der globalen gitconfig des Agenten: die Pipeline soll
+				// nicht von Zustand abhängen, den niemand versioniert (E-021).
+				GIT_CONFIG_COUNT   = '1'
+				GIT_CONFIG_KEY_0   = 'safe.directory'
+				GIT_CONFIG_VALUE_0 = "${DEPLOY_DIR}"
+			}
 			steps {
 				// Lieber hier scheitern als nach der Freigabe mitten im
 				// Umschalten. Die Meldung nennt beim Fehlschlag den Grund.
@@ -196,17 +206,41 @@ pipeline {
 
 		stage('Deployment-Verzeichnis aktualisieren') {
 			when { branch 'main' }
+			environment {
+				GIT_CONFIG_COUNT   = '1'
+				GIT_CONFIG_KEY_0   = 'safe.directory'
+				GIT_CONFIG_VALUE_0 = "${DEPLOY_DIR}"
+			}
 			steps {
 				// Ohne diesen Schritt liefe ein neues Image gegen die
-				// Compose-Datei und die Skripte eines alten Stands. Der aktive
-				// Slot bleibt dabei unberührt: active-slot.conf ist nicht
-				// versioniert und wird von einem Checkout nicht angefasst.
+				// Compose-Datei und die Skripte eines alten Stands.
+				//
+				// Der aktive Slot wird dabei ausdrücklich gerettet. Steht das
+				// Deployment noch auf einem Stand, in dem active-slot.conf
+				// versioniert war, entfernt der Checkout die Datei -- sie ist im
+				// Zielstand nicht mehr im Index. Aus der Vorlage neu angelegt
+				// zeigte sie auf blue, und der aktive Slot spränge still zurück,
+				// ohne dass irgendetwas fehlschlägt.
 				sh '''
 					cd "${DEPLOY_DIR}"
+					KONF=deploy/caddy/active-slot.conf
+					RETTUNG="$(mktemp)"
+					if [ -f "$KONF" ]; then cp "$KONF" "$RETTUNG"; fi
+
 					git fetch --no-tags origin main
 					git checkout -f "${GIT_COMMIT}"
-					test -f deploy/caddy/active-slot.conf ||
-						cp deploy/caddy/active-slot.conf.vorlage deploy/caddy/active-slot.conf
+
+					if [ ! -f "$KONF" ]; then
+						if [ -s "$RETTUNG" ]; then
+							cp "$RETTUNG" "$KONF"
+							echo "Hinweis: aktiver Slot aus dem Stand vor dem Checkout wiederhergestellt"
+						else
+							cp "$KONF.vorlage" "$KONF"
+							echo "Hinweis: aktiver Slot aus der Vorlage angelegt"
+						fi
+					fi
+					rm -f "$RETTUNG"
+
 					git --no-pager log --oneline -1
 					echo "Aktiver Slot bleibt: $(deploy/scripts/active-slot.sh)"
 				'''

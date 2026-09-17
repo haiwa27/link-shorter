@@ -428,6 +428,16 @@ Das Schreibrecht wird über die Gruppe erteilt, nicht über `sudo`:
 Die Stage `Deployment-Verzeichnis prüfen` bricht mit genau diesem Hinweis ab,
 wenn das Recht fehlt — und zwar vor der Freigabe, nicht mitten im Umschalten.
 
+Weil das Verzeichnis dem Benutzer `admin` gehört und nicht Jenkins, verweigert
+git dort sonst jede Operation. Die Ausnahme steht als `safe.directory` im
+`environment`-Block der betroffenen Stages und nicht in der gitconfig des
+Agenten — sonst hinge die Pipeline an Zustand, den niemand versioniert (E-021).
+
+**Merksatz:** Beim ersten Deployment nach dieser Umstellung entfernt der
+Checkout im Deployment-Verzeichnis die dort noch versionierte
+`active-slot.conf`. Die Stage sichert sie vorher und stellt sie danach wieder
+her. Ohne das käme sie aus der Vorlage zurück — und die zeigt auf `blue`.
+
 ### Deploy-Ablauf
 
 Der untätige Slot wird bespielt, während der aktive weiterläuft. Erst nach
