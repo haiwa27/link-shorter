@@ -17,6 +17,11 @@ pipeline {
 		disableConcurrentBuilds()
 	}
 
+	parameters {
+		booleanParam(name: 'FEHLER_VORFUEHREN', defaultValue: false,
+			description: 'Zielslot mit 30 Prozent Serverfehlern ausliefern, um den automatischen Rollback vorzufuehren. Ohne Haken wird immer fehlerfrei ausgeliefert.')
+	}
+
 	environment {
 		SHA          = "${env.GIT_COMMIT?.take(7) ?: 'dev'}"
 		// Das Image trägt den Commit im Namen und wird genau einmal gebaut.
@@ -356,12 +361,17 @@ pipeline {
 				}
 				sh '''
 					cd "${DEPLOY_DIR}"
+					# Die Fehlerrate kommt ausschliesslich aus dem Build-Parameter. Explizit
+					# gesetzt, damit ein Wert in der .env nie versehentlich mit ausgeliefert wird.
+					CHAOS=0.0
+					if [ "$FEHLER_VORFUEHREN" = "true" ]; then CHAOS=0.3; fi
+					echo "Fehlerrate fuer ${ZIEL_SLOT}: ${CHAOS}"
 					if [ "$ZIEL_SLOT" = "blue" ]; then
-						VERSION_BLUE=${SHA} docker compose \
+						VERSION_BLUE=${SHA} CHAOS_BLUE=${CHAOS} docker compose \
 							-f deploy/docker-compose.prod.yml --env-file "${ENV_DATEI}" \
 							up -d app-blue
 					else
-						VERSION_GREEN=${SHA} docker compose \
+						VERSION_GREEN=${SHA} CHAOS_GREEN=${CHAOS} docker compose \
 							-f deploy/docker-compose.prod.yml --env-file "${ENV_DATEI}" \
 							up -d app-green
 					fi
